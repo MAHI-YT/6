@@ -3,7 +3,7 @@ const { cmd, commands } = require('../command');
 
 // Array of different fancy text styles for DARKZONE-MD
 const botNameStyles = [
-    "𝘿𝘼𝙍𝙆𝙕𝙊𝙉𝙀-𝙈𝘿",
+    
     "𝙳𝙰𝚁𝙺𝚉𝙾𝙽𝙴-𝙼𝙳"
 ];
 
