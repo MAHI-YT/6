@@ -1,85 +1,96 @@
-const axios = require("axios");
-const FormData = require('form-data');
-const fs = require('fs');
-const os = require('os');
-const path = require("path");
-const { cmd } = require("../command");
 
-// Helper function to format bytes
-function formatBytes(bytes) {
-  if (bytes === 0) return '0 Bytes';
-  const k = 1024;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}
+const { cmd } = require('../command');
+const axios = require('axios');
 
 cmd({
-  pattern: "rmbg",
-  alias: ["removebg"],
-  react: '📸',
-  desc: "Scan and remove bg from images",
-  category: "img_edit",
-  use: ".rmbg [reply to image]",
-  filename: __filename
-}, async (conn, message, m,  { reply, mek }) => {
-  try {
-    // Check if quoted message exists and has media
-    const quotedMsg = message.quoted ? message.quoted : message;
-    const mimeType = (quotedMsg.msg || quotedMsg).mimetype || '';
-    
-    if (!mimeType || !mimeType.startsWith('image/')) {
-      return reply("Please reply to an image file (JPEG/PNG)");
+    pattern: "removebg",
+    alias: ["rmbg", "bgremove"],
+    desc: "Remove background from an image (Dark Zone MD)",
+    category: "tools",
+    react: "✂️",
+    filename: __filename
+}, async (conn, mek, m, { from, q, reply }) => {
+    try {
+        let imageUrl;
+
+        // Case 1: Reply to an image
+        if (m.quoted && m.quoted.message && m.quoted.message.imageMessage) {
+            imageUrl = await conn.downloadAndSaveMediaMessage(m.quoted, 'removebg');
+        }
+
+        // Case 2: Image URL provided
+        if (q && q.startsWith("http")) {
+            imageUrl = q;
+        }
+
+        if (!imageUrl) {
+            return await reply(`
+✂️ *REMOVE BACKGROUND – DARK ZONE MD* ✂️
+
+📸 Reply to an image OR provide an image URL.
+
+💡 Examples:
+• Reply to image + \`.removebg\`
+• \`.removebg https://image.jpg\`
+            `);
+        }
+
+        // Processing message
+        await conn.sendMessage(from, {
+            text: `
+╔═══════════◇✂️◇═════════╗
+      *REMOVING BACKGROUND*
+╚═══════════◇✂️◇═════════╝
+
+🖼️ Image received  
+⏳ Processing...
+            `
+        }, { quoted: mek });
+
+        // If replied image, upload first (WhatsApp local file)
+        if (!imageUrl.startsWith("http")) {
+            const upload = await axios.post(
+                "https://telegra.ph/upload",
+                require("fs").createReadStream(imageUrl),
+                { headers: { "Content-Type": "multipart/form-data" } }
+            );
+            imageUrl = "https://telegra.ph" + upload.data[0].src;
+        }
+
+        // RemoveBG API (IMAGE RESPONSE)
+        const api = `https://api.zenitsu.web.id/api/tools/removebg?imageUrl=${encodeURIComponent(imageUrl)}`;
+
+        const res = await axios.get(api, { responseType: "arraybuffer" });
+
+        if (!res.data)
+            return await reply("⚠️ Failed to remove background!");
+
+        const resultBuffer = Buffer.from(res.data);
+
+        // Send final image
+        await conn.sendMessage(from, {
+            image: resultBuffer,
+            caption: `
+✨ *BACKGROUND REMOVED!*
+
+✂️ Clean image generated  
+📥 Downloaded & re-sent  
+
+🖤 Powered By  
+『🔥 DARK ZONE MD 🔥』
+            `
+        }, { quoted: mek });
+
+        // Success reaction
+        await conn.sendMessage(from, {
+            react: { text: "✅", key: m.key }
+        });
+
+    } catch (err) {
+        console.error("❌ RemoveBG Error:", err);
+        await reply("⚠️ Something went wrong while removing background!");
+        await conn.sendMessage(from, {
+            react: { text: "❌", key: m.key }
+        });
     }
-
-    // Download the media
-    const mediaBuffer = await quotedMsg.download();
-    const fileSize = formatBytes(mediaBuffer.length);
-    
-    // Get file extension based on mime type
-    let extension = '';
-    if (mimeType.includes('image/jpeg')) extension = '.jpg';
-    else if (mimeType.includes('image/png')) extension = '.png';
-    else {
-      return reply("Unsupported image format. Please use JPEG or PNG");
-    }
-
-    const tempFilePath = path.join(os.tmpdir(), `imgscan_${Date.now()}${extension}`);
-    fs.writeFileSync(tempFilePath, mediaBuffer);
-
-    // Upload to Catbox
-    const form = new FormData();
-    form.append('fileToUpload', fs.createReadStream(tempFilePath), `image${extension}`);
-    form.append('reqtype', 'fileupload');
-
-    const uploadResponse = await axios.post("https://catbox.moe/user/api.php", form, {
-      headers: form.getHeaders()
-    });
-
-    const imageUrl = uploadResponse.data;
-    fs.unlinkSync(tempFilePath); // Clean up temp file
-
-    if (!imageUrl) {
-      throw "Failed to upload image to Catbox";
-    }
-
-    // Scan the image using the API
-    const apiUrl = `https://apis.davidcyriltech.my.id/removebg?url=${encodeURIComponent(imageUrl)}`;
-    const response = await axios.get(apiUrl, { responseType: "arraybuffer" });
-
-    if (!response || !response.data) {
-      return reply("Error: The API did not return a valid image. Try again later.");
-    }
-
-    const imageBuffer = Buffer.from(response.data, "binary");
-
-    await conn.sendMessage(m.chat, {
-      image: imageBuffer,
-      caption: `Background removed\n\n> *𝐸𝑅𝐹𝒜𝒩 𝒜𝐻𝑀𝒜𝒟*`
-    });
-
-  } catch (error) {
-    console.error("Rmbg Error:", error);
-    reply(`An error occurred: ${error.response?.data?.message || error.message || "Unknown error"}`);
-  }
 });
