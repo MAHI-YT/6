@@ -69,7 +69,7 @@ async (conn, mek, m, { from, quoted, reply }) => {
             from,
             {
                 image: { url: apiData.data.result },
-                caption: "✨ Image Enhanced Successfully"
+                caption: "> ✨ Image Enhanced Successfully by DARKZONE-MD"
             },
             { quoted: m }
         );
