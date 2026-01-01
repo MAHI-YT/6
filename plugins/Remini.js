@@ -1,257 +1,136 @@
-const axios = require('axios');
 const { cmd } = require('../command');
-const FormData = require('form-data');
+const config = require('../config');
+const axios = require('axios');
 
-// Store active face swap sessions
-const faceSwapSessions = {};
-
-// Function to upload image to Catbox.moe
-async function uploadToCatbox(buffer) {
-    try {
-        const formData = new FormData();
-        formData.append('reqtype', 'fileupload');
-        formData.append('fileToUpload', buffer, { 
-            filename: 'image.jpg',
-            contentType: 'image/jpeg'
-        });
-        
-        const response = await axios.post('https://catbox.moe/user/api.php', formData, {
-            headers: formData.getHeaders(),
-            timeout: 30000
-        });
-        
-        return response.data;
-    } catch (error) {
-        console.error('Catbox Upload Error:', error);
-        throw new Error('Failed to upload image');
-    }
-}
-
-// Main command to start face swap session
 cmd({
     pattern: "faceswap",
-    alias: ["fs", "swapface", "swap"],
+    alias: ["swap", "fs"],
+    desc: "Swap faces - Reply to first image, send second with command",
+    category: "tools",
     react: "🔄",
-    desc: "Swap faces between two images",
-    category: "tools",
-    use: ".faceswap",
     filename: __filename
-}, async (conn, mek, m, { from, sender, reply }) => {
+},
+async (conn, mek, m, { from, quoted, reply }) => {
     try {
-        const sessionKey = `${from}_${sender}`;
+        // Method 1: Send image with caption .faceswap (first image)
+        // Then reply to bot's message with second image
         
-        // Check if session already exists
-        if (faceSwapSessions[sessionKey]) {
-            const remaining = Math.max(0, Math.floor((60000 - (Date.now() - faceSwapSessions[sessionKey].startTime)) / 1000));
-            return reply(`⚠️ *Active Session Found!*\n\n📸 Images received: ${faceSwapSessions[sessionKey].images.length}/2\n⏱️ Time remaining: ${remaining} seconds\n\n_Send your images or wait for session to expire._`);
-        }
+        const isQuotedImage = quoted && (
+            quoted.mtype === 'imageMessage' || 
+            quoted.message?.imageMessage
+        );
         
-        // Create new session
-        faceSwapSessions[sessionKey] = {
-            images: [],
-            startTime: Date.now(),
-            from: from,
-            sender: sender
-        };
-        
-        await reply(`🔄 *Face Swap Session Started!*\n\n📸 Send *2 images* within *60 seconds*\n\n🖼️ *Image 1:* Face to swap (source)\n🖼️ *Image 2:* Target image\n\n⏱️ Timer: 60 seconds\n\n_Send images one by one or both together!_`);
-        
-        // Auto-expire session after 60 seconds
-        setTimeout(async () => {
-            if (faceSwapSessions[sessionKey]) {
-                const session = faceSwapSessions[sessionKey];
-                if (session.images.length < 2) {
-                    delete faceSwapSessions[sessionKey];
-                    try {
-                        await conn.sendMessage(from, { 
-                            text: `⏰ *Session Expired!*\n\n❌ You sent ${session.images.length}/2 images within 60 seconds.\n\n_Type .faceswap to start again._`
-                        });
-                    } catch (e) {
-                        console.error('Session expire message error:', e);
-                    }
-                }
-            }
-        }, 60000);
-        
-    } catch (error) {
-        console.error('Face Swap Start Error:', error);
-        reply("❌ An error occurred while starting face swap session.");
-    }
-});
+        const isDirectImage = mek.message?.imageMessage || 
+                              m.mtype === 'imageMessage';
 
-// Image listener for face swap
-cmd({
-    on: "image"
-}, async (conn, mek, m, { from, sender, isGroup }) => {
-    try {
-        const sessionKey = `${from}_${sender}`;
-        
-        // Check if user has active session
-        if (!faceSwapSessions[sessionKey]) {
-            return; // No active session, ignore
-        }
-        
-        const session = faceSwapSessions[sessionKey];
-        
-        // Check if session expired
-        if (Date.now() - session.startTime > 60000) {
-            delete faceSwapSessions[sessionKey];
-            return;
-        }
-        
-        // Check if already processing
-        if (session.processing) {
-            return;
-        }
-        
-        // Already have 2 images
-        if (session.images.length >= 2) {
-            return;
-        }
-        
-        // React to show processing
-        await conn.sendMessage(from, { 
-            react: { text: "⏳", key: mek.key }
-        });
-        
-        // Download the image
-        const imageBuffer = await mek.download();
-        
-        if (!imageBuffer || imageBuffer.length === 0) {
-            await conn.sendMessage(from, { 
-                react: { text: "❌", key: mek.key }
-            });
-            return await conn.sendMessage(from, { 
-                text: "❌ Failed to download image. Please send again." 
-            }, { quoted: mek });
-        }
-        
-        // Upload to catbox
-        const imageUrl = await uploadToCatbox(imageBuffer);
-        
-        if (!imageUrl || !imageUrl.startsWith('http')) {
-            await conn.sendMessage(from, { 
-                react: { text: "❌", key: mek.key }
-            });
-            return await conn.sendMessage(from, { 
-                text: "❌ Failed to upload image. Please try again." 
-            }, { quoted: mek });
-        }
-        
-        session.images.push(imageUrl);
-        
-        const timeRemaining = Math.max(0, Math.floor((60000 - (Date.now() - session.startTime)) / 1000));
-        
-        if (session.images.length === 1) {
-            // First image received
-            await conn.sendMessage(from, { 
-                react: { text: "✅", key: mek.key }
-            });
-            await conn.sendMessage(from, { 
-                text: `✅ *Image 1 Received!*\n\n📸 Now send the *second image* (target)\n⏱️ Time remaining: ${timeRemaining} seconds`
-            }, { quoted: mek });
+        // If sending image with command = first image
+        if (isDirectImage && !isQuotedImage) {
+            await conn.sendMessage(from, { react: { text: '⏳', key: mek.key } });
             
-        } else if (session.images.length === 2) {
-            // Second image received - process face swap
-            session.processing = true;
+            const firstImage = await m.download();
+            if (!firstImage) return reply("❌ ғᴀɪʟᴇᴅ ᴛᴏ ᴅᴏᴡɴʟᴏᴀᴅ ɪᴍᴀɢᴇ!");
+
+            // Store image in global temp
+            global.faceswapTemp = global.faceswapTemp || {};
+            const sender = mek.key.participant || mek.key.remoteJid;
+            global.faceswapTemp[sender] = {
+                image: firstImage,
+                time: Date.now()
+            };
+
+            await conn.sendMessage(from, { react: { text: '✅', key: mek.key } });
+            return await reply(`✅ *ғɪʀsᴛ ɪᴍᴀɢᴇ sᴀᴠᴇᴅ!*\n\n📷 *ɴᴏᴡ sᴇɴᴅ sᴇᴄᴏɴᴅ ɪᴍᴀɢᴇ ᴡɪᴛʜ:* .faceswap\n\n⏳ ᴠᴀʟɪᴅ ғᴏʀ 5 ᴍɪɴᴜᴛᴇs`);
+        }
+
+        // If sending second image with command
+        if (isDirectImage) {
+            const sender = mek.key.participant || mek.key.remoteJid;
             
-            await conn.sendMessage(from, { 
-                react: { text: "🔄", key: mek.key }
-            });
-            await conn.sendMessage(from, { 
-                text: "✅ *Image 2 Received!*\n\n🔄 Processing face swap...\n⏳ _This may take up to 2 minutes..._"
-            }, { quoted: mek });
+            // Check if first image exists
+            if (!global.faceswapTemp?.[sender]) {
+                return reply(`❌ *ɴᴏ ғɪʀsᴛ ɪᴍᴀɢᴇ ғᴏᴜɴᴅ!*\n\n*ʜᴏᴡ ᴛᴏ ᴜsᴇ:*\n1️⃣ sᴇɴᴅ ғɪʀsᴛ ɪᴍᴀɢᴇ ᴡɪᴛʜ .faceswap\n2️⃣ sᴇɴᴅ sᴇᴄᴏɴᴅ ɪᴍᴀɢᴇ ᴡɪᴛʜ .faceswap`);
+            }
+
+            // Check if expired (5 minutes)
+            if (Date.now() - global.faceswapTemp[sender].time > 300000) {
+                delete global.faceswapTemp[sender];
+                return reply("❌ ғɪʀsᴛ ɪᴍᴀɢᴇ ᴇxᴘɪʀᴇᴅ! ᴘʟᴇᴀsᴇ sᴛᴀʀᴛ ᴀɢᴀɪɴ.");
+            }
+
+            await conn.sendMessage(from, { react: { text: '⏳', key: mek.key } });
+
+            const firstImage = global.faceswapTemp[sender].image;
+            const secondImage = await m.download();
             
+            if (!secondImage) return reply("❌ ғᴀɪʟᴇᴅ ᴛᴏ ᴅᴏᴡɴʟᴏᴀᴅ sᴇᴄᴏɴᴅ ɪᴍᴀɢᴇ!");
+
+            await reply("⏳ *ᴘʀᴏᴄᴇssɪɴɢ ғᴀᴄᴇ sᴡᴀᴘ...*\n\n_ᴛʜɪs ᴍᴀʏ ᴛᴀᴋᴇ 30-60 sᴇᴄᴏɴᴅs..._");
+
+            // Process face swap
+            let resultBuffer = null;
+
+            // API Option 1 - Using base64
             try {
-                // Call face swap API
-                const apiUrl = `https://api.elrayyxml.web.id/api/tools/faceswap?url1=${encodeURIComponent(session.images[0])}&url2=${encodeURIComponent(session.images[1])}`;
+                const base64Img1 = firstImage.toString('base64');
+                const base64Img2 = secondImage.toString('base64');
                 
-                const response = await axios.get(apiUrl, { 
-                    responseType: 'arraybuffer',
-                    timeout: 120000,
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                    }
+                const response = await axios.post('https://api.ryzendesu.vip/api/ai/faceswap', {
+                    sourceImage: `data:image/jpeg;base64,${base64Img1}`,
+                    targetImage: `data:image/jpeg;base64,${base64Img2}`
+                }, {
+                    timeout: 120000
                 });
                 
-                // Check if response is valid image
-                if (!response.data || response.data.length === 0) {
-                    throw new Error('Empty response from API');
+                if (response.data?.result) {
+                    const imgRes = await axios.get(response.data.result, { responseType: 'arraybuffer' });
+                    resultBuffer = Buffer.from(imgRes.data);
                 }
-                
-                // Send the swapped image
-                await conn.sendMessage(from, {
-                    image: Buffer.from(response.data),
-                    caption: `🔄 *Face Swap Complete!*\n\n✅ Successfully swapped faces!\n\n📸 Source: Image 1\n🎯 Target: Image 2\n\n*DARKZONE-MD*`,
-                    contextInfo: {
-                        mentionedJid: [sender],
-                        forwardingScore: 999,
-                        isForwarded: true,
-                        forwardedNewsletterMessageInfo: {
-                            newsletterJid: '120363416743041101@newsletter',
-                            newsletterName: "DARKZONE-MD",
-                            serverMessageId: 143,
-                        },
-                    },
-                }, { quoted: mek });
-                
-                await conn.sendMessage(from, { 
-                    react: { text: "✅", key: mek.key }
-                });
-                
-            } catch (apiError) {
-                console.error('Face Swap API Error:', apiError);
-                await conn.sendMessage(from, { 
-                    react: { text: "❌", key: mek.key }
-                });
-                await conn.sendMessage(from, { 
-                    text: `❌ *Face Swap Failed!*\n\n${apiError.message || 'API error occurred'}\n\n_Please try again with .faceswap_`
-                }, { quoted: mek });
+            } catch (err) {
+                console.log('API 1 error:', err.message);
             }
-            
-            // Clear session
-            delete faceSwapSessions[sessionKey];
-        }
-        
-    } catch (error) {
-        console.error('Face Swap Image Handler Error:', error);
-        const sessionKey = `${from}_${sender}`;
-        
-        if (faceSwapSessions[sessionKey]) {
-            delete faceSwapSessions[sessionKey];
-        }
-        
-        await conn.sendMessage(from, { 
-            react: { text: "❌", key: mek.key }
-        });
-        await conn.sendMessage(from, { 
-            text: "❌ *Error!*\n\nFailed to process image.\n\n_Please try again with .faceswap_"
-        }, { quoted: mek });
-    }
-});
 
-// Cancel command
-cmd({
-    pattern: "cancelswap",
-    alias: ["csw", "cancelfs"],
-    react: "❌",
-    desc: "Cancel active face swap session",
-    category: "tools",
-    use: ".cancelswap",
-    filename: __filename
-}, async (conn, mek, m, { from, sender, reply }) => {
-    try {
-        const sessionKey = `${from}_${sender}`;
-        
-        if (faceSwapSessions[sessionKey]) {
-            delete faceSwapSessions[sessionKey];
-            return reply("✅ Face swap session cancelled successfully!");
-        } else {
-            return reply("⚠️ You don't have any active face swap session.");
+            // API Option 2
+            if (!resultBuffer) {
+                try {
+                    const FormData = require('form-data');
+                    const form = new FormData();
+                    form.append('source', firstImage, 'source.jpg');
+                    form.append('target', secondImage, 'target.jpg');
+                    
+                    const response = await axios.post('https://api.vhtear.com/faceswap', form, {
+                        headers: form.getHeaders(),
+                        responseType: 'arraybuffer',
+                        timeout: 120000
+                    });
+                    resultBuffer = Buffer.from(response.data);
+                } catch (err) {
+                    console.log('API 2 error:', err.message);
+                }
+            }
+
+            // Clear temp
+            delete global.faceswapTemp[sender];
+
+            if (resultBuffer) {
+                await conn.sendMessage(from, { react: { text: '✅', key: mek.key } });
+                
+                await conn.sendMessage(from, {
+                    image: resultBuffer,
+                    caption: `✅ *ғᴀᴄᴇ sᴡᴀᴘ ᴄᴏᴍᴘʟᴇᴛᴇ!*\n\n> ᴘᴏᴡᴇʀᴇᴅ ʙʏ ${config.OWNER_NAME}`
+                }, { quoted: mek });
+            } else {
+                await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
+                await reply("❌ ғᴀᴄᴇ sᴡᴀᴘ ғᴀɪʟᴇᴅ! ᴀᴘɪ ɴᴏᴛ ʀᴇsᴘᴏɴᴅɪɴɢ.");
+            }
+            return;
         }
-        
-    } catch (error) {
-        console.error('Cancel Swap Error:', error);
-        reply("❌ An error occurred.");
+
+        // If no image
+        return reply(`📷 *ғᴀᴄᴇ sᴡᴀᴘ*\n\n*ʜᴏᴡ ᴛᴏ ᴜsᴇ:*\n\n1️⃣ sᴇɴᴅ ғɪʀsᴛ ɪᴍᴀɢᴇ ᴡɪᴛʜ ᴄᴀᴘᴛɪᴏɴ: .faceswap\n2️⃣ sᴇɴᴅ sᴇᴄᴏɴᴅ ɪᴍᴀɢᴇ ᴡɪᴛʜ ᴄᴀᴘᴛɪᴏɴ: .faceswap\n\n✅ ᴅᴏɴᴇ!`);
+
+    } catch (e) {
+        console.error("FaceSwap Error:", e);
+        await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
+        reply(`❌ ᴇʀʀᴏʀ: ${e.message}`);
     }
 });
