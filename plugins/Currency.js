@@ -1,57 +1,57 @@
-const { cmd } = require('../command');
-const axios = require('axios');
+const { cmd } = require("../command");
+// CORRECT IMPORT FOR JIMP 1.6.0 - Use destructuring
+const { Jimp } = require("jimp");
 
 cmd({
-  pattern: "currency",
-  desc: "Convert between fiat and cryptocurrencies in real-time.",
+  pattern: "fixpp",
+  alias: ["newpp"],
+  react: "🖼️",
+  desc: "Fixed version for Jimp 1.6.0",
   category: "tools",
-  react: "💱",
   filename: __filename
-},
-async (conn, mek, m, { text, args, reply }) => {
+}, async (client, message, match, { from, isCreator }) => {
   try {
-    if (args.length < 3) {
-      return reply(
-        "💱 *Usage Example:*\n\n" +
-        ".convert 100 USD IDR\n\n" +
-        "Converts 100 USD to Indonesian Rupiah (IDR)."
-      );
+    // Authorization
+    const botJid = client.user?.id || (client.user.id.split(":")[0] + "@s.whatsapp.net");
+    if (message.sender !== botJid && !isCreator) {
+      return await client.sendMessage(from, {
+        text: "*📛 This command can only be used by the bot or its owner.*"
+      }, { quoted: message });
     }
 
-    const [amount, from, to] = args;
-    const apiUrl = `https://api.mrfrankofc.gleeze.com/api/currency/convert?amount=${encodeURIComponent(amount)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
-
-    await reply("💹 Fetching latest conversion rates...");
-
-    const res = await axios.get(apiUrl, { timeout: 15000 });
-
-    if (!res || !res.data) {
-      return reply("❌ No response from Currency API. Please try again later.");
+    if (!message.quoted?.mtype?.includes("image")) {
+      return await client.sendMessage(from, { 
+        text: "*⚠️ Please reply to an image to set as profile picture*" 
+      }, { quoted: message });
     }
 
-    if (res.data.status === false) {
-      const err = res.data.error || "Conversion failed.";
-      return reply(`❌ *API Error:* ${err}`);
-    }
+    await client.sendMessage(from, { 
+      text: "*⏳ Processing image, please wait...*" 
+    }, { quoted: message });
 
-    const data = res.data.data;
-    const resultText = 
-`💱 *Currency Conversion Result*
+    // Download image
+    const imageBuffer = await message.quoted.download();
+    
+    // Process image - Use Jimp.read with destructured Jimp
+    const image = await Jimp.read(imageBuffer);
+    
+    // Just resize to square (skip blur/composite for now)
+    image.resize(640, Jimp.AUTO);
+    
+    // Get buffer
+    const finalImage = await image.getBufferAsync(Jimp.MIME_JPEG);
+    
+    // Update profile
+    await client.updateProfilePicture(botJid, finalImage);
+    
+    await client.sendMessage(from, { 
+      text: "*✅ Bot's profile picture updated successfully!*" 
+    }, { quoted: message });
 
-💰 *Amount:* ${data.amount} ${data.from}
-➡️ *Converted To:* ${data.to}
-📈 *Exchange Rate:* ${data.rate.toLocaleString()}
-💵 *Result:* ${data.result.toLocaleString()} ${data.to}
-
-⏰ *Updated:* ${new Date(data.timestamp).toLocaleString()}
-
-~ DARKZONE-MD`;
-
-    await conn.sendMessage(m.chat, { text: resultText }, { quoted: mek });
-
-  } catch (err) {
-    console.error("Currency Convert Error:", err);
-    if (err.code === "ECONNABORTED") return reply("❌ Request timed out. Please try again later.");
-    return reply("❌ Failed to connect to Currency API. Please try again later.");
+  } catch (error) {
+    console.error("fixpp Error:", error);
+    await client.sendMessage(from, {
+      text: `*❌ Error updating profile picture:*\n${error.message}\n\nTry: \`npm install jimp@latest\``
+    }, { quoted: message });
   }
 });
