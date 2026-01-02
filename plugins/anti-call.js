@@ -5,7 +5,7 @@ let antiCallEnabled = config.ANTI_CALL === "true"; // Initial value from config
 
 // Activation / désactivation via commande
 cmd({
-  pattern: "anticall",
+  pattern: "anticalll",
   alias: ["callblock", "rejectcall"],
   desc: "Enable or disable auto call reject feature.",
   category: "settings",
