@@ -1,314 +1,360 @@
 const { cmd } = require('../command');
-
-// Store presence data
-const presenceData = new Map();
+const axios = require('axios');
 
 cmd({
-    pattern: "online",
-    alias: ["onlinelist", "whosonline", "onlines", "listonline"],
-    react: "🟢",
-    desc: "Show list of online members in the group",
-    category: "group",
-    use: ".online",
+    pattern: "pinterestimg",
+    alias: ["pinimg", "pinimg", "pinterestdlimg", "pindl"],
+    react: "📌",
+    desc: "Download images from Pinterest. Search by keyword or provide direct link.",
+    category: "download",
+    use: ".pinterest <search query> OR .pinterest <pinterest link>",
     filename: __filename
 },
-async (conn, mek, m, { from, isGroup, reply }) => {
+async (conn, mek, m, { from, args, reply }) => {
     try {
-        // Only works in groups
-        if (!isGroup) {
-            return reply("❌ This command only works in groups!");
+        // Check if query/link is provided
+        const input = args.join(' ').trim();
+        
+        if (!input) {
+            return reply(`📌 *Pinterest Image Downloader*\n\n❌ Please provide a search query or Pinterest link!\n\n*Usage:*\n• \`.pinterest anime girl\`\n• \`.pinterest cats\`\n• \`.pinterest https://pinterest.com/pin/xxx\`\n\n_Powered by DARKZONE-MD_`);
         }
 
-        // Send initial message
-        const waitMsg = await conn.sendMessage(from, {
-            text: "🔍 *Detecting online members...*\n\n⏳ Please wait, scanning group participants...\n\n_This may take 10-15 seconds_"
+        // Check if input is a link or search query
+        const isLink = input.startsWith('http://') || input.startsWith('https://') || input.includes('pinterest.com') || input.includes('pin.it');
+
+        let processingMsg;
+
+        // ========== FEATURE 1: SEARCH BY KEYWORD ==========
+        if (!isLink) {
+            processingMsg = await conn.sendMessage(from, {
+                text: `📌 *Pinterest Search*\n\n🔍 Searching for: *${input}*\n\n⏳ Please wait...`
+            }, { quoted: mek });
+
+            // Call Pinterest API with search query
+            let apiResponse;
+            try {
+                apiResponse = await axios.get(`https://api-faa.my.id/faa/pinterest?query=${encodeURIComponent(input)}`, {
+                    timeout: 30000
+                });
+            } catch (apiErr) {
+                console.error("Pinterest API Error:", apiErr.message);
+                return reply("❌ Failed to search Pinterest. API might be down. Please try again later.");
+            }
+
+            // Validate response
+            if (!apiResponse.data || !apiResponse.data.status) {
+                return reply("❌ No results found. Please try a different search query.");
+            }
+
+            const images = apiResponse.data.result;
+
+            if (!images || images.length === 0) {
+                return reply(`❌ No images found for "*${input}*". Try a different search query.`);
+            }
+
+            // Delete processing message
+            try {
+                await conn.sendMessage(from, { delete: processingMsg.key });
+            } catch (e) {}
+
+            // Send info message
+            await conn.sendMessage(from, {
+                text: `📌 *Pinterest Search Results*\n\n🔍 *Query:* ${input}\n📷 *Images Found:* ${images.length}\n\n⏳ Sending images...`
+            }, { quoted: mek });
+
+            // Send images (limit to 5 to avoid spam)
+            const maxImages = Math.min(images.length, 5);
+            let sentCount = 0;
+
+            for (let i = 0; i < maxImages; i++) {
+                try {
+                    const imageUrl = images[i];
+                    
+                    // Download image
+                    const imageResponse = await axios.get(imageUrl, {
+                        responseType: 'arraybuffer',
+                        timeout: 30000
+                    });
+
+                    const imageBuffer = Buffer.from(imageResponse.data);
+
+                    // Send image
+                    await conn.sendMessage(from, {
+                        image: imageBuffer,
+                        caption: `📌 *Pinterest Image ${i + 1}/${maxImages}*\n\n🔍 *Search:* ${input}\n🔗 *Source:* Pinterest\n\n━━━━━━━━━━━━━━━━━━━━━\n*📥 Downloaded by DARKZONE-MD*\n━━━━━━━━━━━━━━━━━━━━━`
+                    }, { quoted: mek });
+
+                    sentCount++;
+                    
+                    // Small delay between images
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+
+                } catch (imgErr) {
+                    console.error(`Failed to send image ${i + 1}:`, imgErr.message);
+                    continue;
+                }
+            }
+
+            // Final summary message
+            if (sentCount > 0) {
+                await conn.sendMessage(from, {
+                    text: `✅ *Download Complete!*\n\n📷 *Sent:* ${sentCount} images\n🔍 *Query:* ${input}\n\n💡 _Use \`.pinterest ${input} more\` for different images_\n\n*🌟 DARKZONE-MD*`
+                }, { quoted: mek });
+            } else {
+                reply("❌ Failed to download images. Please try again.");
+            }
+
+        }
+        
+        // ========== FEATURE 2: DOWNLOAD FROM LINK ==========
+        else {
+            processingMsg = await conn.sendMessage(from, {
+                text: `📌 *Pinterest Link Download*\n\n🔗 Processing link...\n\n⏳ Please wait...`
+            }, { quoted: mek });
+
+            // Call Pinterest API with link
+            let apiResponse;
+            try {
+                apiResponse = await axios.get(`https://api-faa.my.id/faa/pinterest?url=${encodeURIComponent(input)}`, {
+                    timeout: 30000
+                });
+            } catch (apiErr) {
+                console.error("Pinterest API Error:", apiErr.message);
+                
+                // If URL method fails, try as search (some APIs work differently)
+                try {
+                    apiResponse = await axios.get(`https://api-faa.my.id/faa/pinterest?query=${encodeURIComponent(input)}`, {
+                        timeout: 30000
+                    });
+                } catch (err2) {
+                    return reply("❌ Failed to download from this link. Please try again or use search instead.");
+                }
+            }
+
+            // Validate response
+            if (!apiResponse.data || !apiResponse.data.status) {
+                return reply("❌ Failed to get image from this link. Please check the URL.");
+            }
+
+            const images = apiResponse.data.result;
+
+            if (!images || images.length === 0) {
+                return reply("❌ No image found at this link. Please check the URL.");
+            }
+
+            // Delete processing message
+            try {
+                await conn.sendMessage(from, { delete: processingMsg.key });
+            } catch (e) {}
+
+            // Get first image (for link download usually returns 1 image)
+            const imageUrl = Array.isArray(images) ? images[0] : images;
+
+            // Download image
+            let imageBuffer;
+            try {
+                const imageResponse = await axios.get(imageUrl, {
+                    responseType: 'arraybuffer',
+                    timeout: 30000
+                });
+                imageBuffer = Buffer.from(imageResponse.data);
+            } catch (downloadErr) {
+                console.error("Image download error:", downloadErr.message);
+                return reply(`❌ Failed to download image.\n\n🔗 *Direct Link:*\n${imageUrl}\n\n_Try opening in browser_`);
+            }
+
+            // Send image
+            await conn.sendMessage(from, {
+                image: imageBuffer,
+                caption: `📌 *Pinterest Image Downloaded*\n\n🔗 *Source:* Pinterest\n📥 *Status:* Success ✅\n\n━━━━━━━━━━━━━━━━━━━━━\n*📥 Downloaded by DARKZONE-MD*\n━━━━━━━━━━━━━━━━━━━━━`
+            }, { quoted: mek });
+
+        }
+
+    } catch (e) {
+        console.error("Pinterest command error:", e);
+        reply("❌ An unexpected error occurred. Please try again later.");
+    }
+});
+
+// ========== PINTEREST RANDOM IMAGE ==========
+
+cmd({
+    pattern: "pinrandom",
+    alias: ["randompin", "randompinterest"],
+    react: "🎲",
+    desc: "Get random Pinterest images by category",
+    category: "download",
+    use: ".pinrandom <category>",
+    filename: __filename
+},
+async (conn, mek, m, { from, args, reply }) => {
+    try {
+        const category = args.join(' ').trim();
+
+        if (!category) {
+            return reply(`🎲 *Pinterest Random Images*\n\n❌ Please provide a category!\n\n*Popular Categories:*\n• anime\n• nature\n• cars\n• aesthetic\n• quotes\n• wallpaper\n• art\n• fashion\n\n*Usage:* \`.pinrandom anime\`\n\n_Powered by DARKZONE-MD_`);
+        }
+
+        const processingMsg = await conn.sendMessage(from, {
+            text: `🎲 *Getting Random Images...*\n\n📂 Category: *${category}*\n⏳ Please wait...`
         }, { quoted: mek });
 
-        // Get group metadata
-        let groupMetadata;
+        // Call API
+        let apiResponse;
         try {
-            groupMetadata = await conn.groupMetadata(from);
-        } catch (err) {
-            console.error("Error getting group metadata:", err);
-            return reply("❌ Failed to get group information.");
+            apiResponse = await axios.get(`https://api-faa.my.id/faa/pinterest?query=${encodeURIComponent(category)}`, {
+                timeout: 30000
+            });
+        } catch (apiErr) {
+            return reply("❌ Failed to fetch images. Please try again.");
         }
 
-        const participants = groupMetadata.participants || [];
-        const groupName = groupMetadata.subject || "This Group";
-
-        if (participants.length === 0) {
-            return reply("❌ No participants found in this group.");
+        if (!apiResponse.data || !apiResponse.data.status || !apiResponse.data.result) {
+            return reply("❌ No images found for this category.");
         }
 
-        // Clear previous presence data for this group
-        const groupPresence = new Map();
+        const images = apiResponse.data.result;
 
-        // Set up presence listener
-        const presenceHandler = (update) => {
-            try {
-                const jid = update.id;
-                const presences = update.presences;
-                
-                if (presences) {
-                    for (const [participantJid, presenceInfo] of Object.entries(presences)) {
-                        if (presenceInfo.lastKnownPresence === 'available' || 
-                            presenceInfo.lastKnownPresence === 'composing' ||
-                            presenceInfo.lastKnownPresence === 'recording') {
-                            groupPresence.set(participantJid, {
-                                jid: participantJid,
-                                presence: presenceInfo.lastKnownPresence,
-                                timestamp: Date.now()
-                            });
-                        }
-                    }
-                }
-            } catch (e) {
-                // Ignore errors in handler
-            }
-        };
-
-        // Register presence listener
-        conn.ev.on('presence.update', presenceHandler);
-
-        // Subscribe to presence for all participants
-        console.log(`[Online] Subscribing to ${participants.length} participants...`);
-        
-        for (const participant of participants) {
-            try {
-                await conn.presenceSubscribe(participant.id);
-                // Small delay to avoid rate limiting
-                await new Promise(resolve => setTimeout(resolve, 100));
-            } catch (err) {
-                // Ignore subscription errors for individual participants
-            }
+        if (images.length === 0) {
+            return reply("❌ No images found. Try a different category.");
         }
 
-        // Wait for presence updates to come in (10 seconds)
-        await new Promise(resolve => setTimeout(resolve, 10000));
-
-        // Remove presence listener
-        conn.ev.off('presence.update', presenceHandler);
-
-        // Get online members
-        const onlineMembers = [];
-        
-        for (const [jid, data] of groupPresence) {
-            // Verify this member is in the group
-            const isInGroup = participants.some(p => p.id === jid);
-            if (isInGroup) {
-                onlineMembers.push(data);
-            }
-        }
-
-        // Delete the waiting message
+        // Delete processing message
         try {
-            await conn.sendMessage(from, { delete: waitMsg.key });
+            await conn.sendMessage(from, { delete: processingMsg.key });
         } catch (e) {}
 
-        // If no online members detected
-        if (onlineMembers.length === 0) {
-            return conn.sendMessage(from, {
-                text: `🟢 *Online Members in ${groupName}*\n\n❌ No online members detected!\n\n_Possible reasons:_\n• Members have privacy settings enabled\n• Members are offline\n• WhatsApp didn't respond in time\n\n💡 _Try again in a few moments_`
-            }, { quoted: mek });
-        }
+        // Get random image from results
+        const randomIndex = Math.floor(Math.random() * images.length);
+        const randomImageUrl = images[randomIndex];
 
-        // Build the online members list
-        let messageText = `🟢 *Online Members in ${groupName}*\n\n`;
-        messageText += `📊 *Total Online:* ${onlineMembers.length} / ${participants.length}\n\n`;
-        messageText += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
-
-        const mentions = [];
-        let count = 1;
-
-        for (const member of onlineMembers) {
-            const jid = member.jid;
-            const number = jid.split('@')[0];
-            
-            let statusIcon = "🟢";
-            if (member.presence === 'composing') {
-                statusIcon = "⌨️";
-            } else if (member.presence === 'recording') {
-                statusIcon = "🎤";
-            }
-            
-            messageText += `${count}. ${statusIcon} @${number}\n`;
-            mentions.push(jid);
-            count++;
-        }
-
-        messageText += `\n━━━━━━━━━━━━━━━━━━━━━\n\n`;
-        messageText += `🟢 = Online\n`;
-        messageText += `⌨️ = Typing\n`;
-        messageText += `🎤 = Recording\n\n`;
-        messageText += `⏰ _Scanned at: ${new Date().toLocaleTimeString()}_`;
-
-        // Send the online members list
-        await conn.sendMessage(from, {
-            text: messageText,
-            mentions: mentions
-        }, { quoted: mek });
-
-    } catch (e) {
-        console.error("Online command error:", e);
-        reply("❌ An error occurred while detecting online members.");
-    }
-});
-
-// ============ ALTERNATIVE METHOD: Real-time Online Tracking ============
-
-// Store for tracking online status
-const onlineTracker = new Map();
-
-cmd({
-    pattern: "trackonline",
-    alias: ["onlinetrack", "trackpresence"],
-    react: "📡",
-    desc: "Start tracking online members in real-time",
-    category: "group",
-    use: ".trackonline on/off",
-    filename: __filename
-},
-async (conn, mek, m, { from, isGroup, args, reply }) => {
-    try {
-        if (!isGroup) {
-            return reply("❌ This command only works in groups!");
-        }
-
-        const action = args[0]?.toLowerCase();
-
-        if (!action || (action !== 'on' && action !== 'off')) {
-            const status = onlineTracker.has(from) ? "ON ✅" : "OFF ❌";
-            return reply(`📡 *Real-time Online Tracker*\n\n*Current Status:* ${status}\n\n*Usage:*\n• \`.trackonline on\` - Start tracking\n• \`.trackonline off\` - Stop tracking\n\n_When ON, bot will notify when members come online_`);
-        }
-
-        if (action === 'on') {
-            // Get group participants
-            const metadata = await conn.groupMetadata(from);
-            const participants = metadata.participants || [];
-
-            // Subscribe to all participants
-            for (const p of participants) {
-                try {
-                    await conn.presenceSubscribe(p.id);
-                } catch (e) {}
-            }
-
-            onlineTracker.set(from, {
-                enabled: true,
-                participants: participants.map(p => p.id),
-                lastOnline: new Map()
+        // Download and send
+        try {
+            const imageResponse = await axios.get(randomImageUrl, {
+                responseType: 'arraybuffer',
+                timeout: 30000
             });
 
-            reply("✅ *Online Tracker Activated!*\n\n📡 Now tracking online status of members.\n\n_Use `.online` to see current online members_");
+            const imageBuffer = Buffer.from(imageResponse.data);
 
-        } else if (action === 'off') {
-            onlineTracker.delete(from);
-            reply("✅ *Online Tracker Deactivated!*\n\n_No longer tracking online status_");
+            await conn.sendMessage(from, {
+                image: imageBuffer,
+                caption: `🎲 *Random Pinterest Image*\n\n📂 *Category:* ${category}\n🔢 *Total Available:* ${images.length}\n\n━━━━━━━━━━━━━━━━━━━━━\n*📥 Downloaded by DARKZONE-MD*\n━━━━━━━━━━━━━━━━━━━━━\n\n_Use \`.pinrandom ${category}\` for another random image_`
+            }, { quoted: mek });
+
+        } catch (err) {
+            reply("❌ Failed to download the random image. Please try again.");
         }
 
     } catch (e) {
-        console.error("Track online error:", e);
-        reply("❌ An error occurred.");
+        console.error("Pinterest random error:", e);
+        reply("❌ An error occurred. Please try again.");
     }
 });
 
-// ============ QUICK ONLINE CHECK ============
+// ========== PINTEREST BULK DOWNLOAD ==========
 
 cmd({
-    pattern: "checkonline",
-    alias: ["isonline", "checkstatus"],
-    react: "🔍",
-    desc: "Check if a specific user is online",
-    category: "group",
-    use: ".checkonline @user or reply to message",
+    pattern: "pinbulk",
+    alias: ["pinterestbulk", "pinall"],
+    react: "📦",
+    desc: "Download multiple Pinterest images at once",
+    category: "download",
+    use: ".pinbulk <search> <count>",
     filename: __filename
 },
-async (conn, mek, m, { from, quoted, mentionedJid, reply }) => {
+async (conn, mek, m, { from, args, reply }) => {
     try {
-        let targetJid;
-
-        // Check if mentioned someone
-        if (mentionedJid && mentionedJid.length > 0) {
-            targetJid = mentionedJid[0];
-        }
-        // Check if replied to someone
-        else if (quoted && quoted.sender) {
-            targetJid = quoted.sender;
-        }
-        else {
-            return reply("❌ Please mention someone or reply to their message!\n\n*Usage:*\n• `.checkonline @user`\n• Reply to a message with `.checkonline`");
+        if (args.length < 1) {
+            return reply(`📦 *Pinterest Bulk Download*\n\n❌ Please provide search query and count!\n\n*Usage:*\n• \`.pinbulk anime 10\`\n• \`.pinbulk cars 5\`\n\n*Max:* 15 images\n\n_Powered by DARKZONE-MD_`);
         }
 
-        const number = targetJid.split('@')[0];
+        // Parse arguments
+        let count = 5; // Default
+        let searchQuery = args.join(' ');
 
-        await reply(`🔍 Checking online status of @${number}...`, { mentions: [targetJid] });
+        // Check if last argument is a number
+        const lastArg = args[args.length - 1];
+        if (!isNaN(lastArg)) {
+            count = parseInt(lastArg);
+            searchQuery = args.slice(0, -1).join(' ');
+        }
 
-        // Variable to store presence
-        let userPresence = null;
+        // Limit count
+        count = Math.min(Math.max(count, 1), 15);
 
-        // Set up one-time presence listener
-        const presenceHandler = (update) => {
-            if (update.id === targetJid || 
-                (update.presences && update.presences[targetJid])) {
-                
-                if (update.presences && update.presences[targetJid]) {
-                    userPresence = update.presences[targetJid].lastKnownPresence;
-                }
-            }
-        };
+        if (!searchQuery) {
+            return reply("❌ Please provide a search query!");
+        }
 
-        conn.ev.on('presence.update', presenceHandler);
+        const processingMsg = await conn.sendMessage(from, {
+            text: `📦 *Pinterest Bulk Download*\n\n🔍 *Search:* ${searchQuery}\n📷 *Requested:* ${count} images\n\n⏳ Downloading...`
+        }, { quoted: mek });
 
-        // Subscribe to user's presence
+        // Call API
+        let apiResponse;
         try {
-            await conn.presenceSubscribe(targetJid);
-        } catch (err) {
-            console.error("Presence subscribe error:", err);
+            apiResponse = await axios.get(`https://api-faa.my.id/faa/pinterest?query=${encodeURIComponent(searchQuery)}`, {
+                timeout: 30000
+            });
+        } catch (apiErr) {
+            return reply("❌ Failed to fetch images. Please try again.");
         }
 
-        // Wait for presence update
-        await new Promise(resolve => setTimeout(resolve, 5000));
-
-        // Remove listener
-        conn.ev.off('presence.update', presenceHandler);
-
-        // Build response
-        let statusText;
-        let statusEmoji;
-
-        switch (userPresence) {
-            case 'available':
-                statusEmoji = "🟢";
-                statusText = "Online";
-                break;
-            case 'composing':
-                statusEmoji = "⌨️";
-                statusText = "Typing...";
-                break;
-            case 'recording':
-                statusEmoji = "🎤";
-                statusText = "Recording audio...";
-                break;
-            case 'unavailable':
-                statusEmoji = "⚪";
-                statusText = "Offline";
-                break;
-            case 'paused':
-                statusEmoji = "⏸️";
-                statusText = "Paused";
-                break;
-            default:
-                statusEmoji = "❓";
-                statusText = "Unknown (Privacy enabled or no response)";
+        if (!apiResponse.data || !apiResponse.data.status || !apiResponse.data.result) {
+            return reply("❌ No images found.");
         }
 
+        const images = apiResponse.data.result;
+        const actualCount = Math.min(count, images.length);
+
+        // Delete processing message
+        try {
+            await conn.sendMessage(from, { delete: processingMsg.key });
+        } catch (e) {}
+
+        // Send progress message
         await conn.sendMessage(from, {
-            text: `📱 *User Status Check*\n\n👤 *User:* @${number}\n${statusEmoji} *Status:* ${statusText}\n\n⏰ _Checked at: ${new Date().toLocaleTimeString()}_`,
-            mentions: [targetJid]
+            text: `📦 *Starting Bulk Download...*\n\n🔍 *Query:* ${searchQuery}\n📷 *Sending:* ${actualCount} images\n\n⏳ Please wait...`
+        }, { quoted: mek });
+
+        let successCount = 0;
+
+        for (let i = 0; i < actualCount; i++) {
+            try {
+                const imageUrl = images[i];
+
+                const imageResponse = await axios.get(imageUrl, {
+                    responseType: 'arraybuffer',
+                    timeout: 30000
+                });
+
+                const imageBuffer = Buffer.from(imageResponse.data);
+
+                await conn.sendMessage(from, {
+                    image: imageBuffer,
+                    caption: `📌 *[${i + 1}/${actualCount}]*\n\n🔍 *Search:* ${searchQuery}\n\n━━━━━━━━━━━━━━━━━━━━━\n*📥 DARKZONE-MD*\n━━━━━━━━━━━━━━━━━━━━━`
+                }, { quoted: mek });
+
+                successCount++;
+
+                // Delay between sends
+                await new Promise(resolve => setTimeout(resolve, 1500));
+
+            } catch (err) {
+                console.error(`Failed to send image ${i + 1}:`, err.message);
+                continue;
+            }
+        }
+
+        // Final message
+        await conn.sendMessage(from, {
+            text: `✅ *Bulk Download Complete!*\n\n📷 *Downloaded:* ${successCount}/${actualCount}\n🔍 *Query:* ${searchQuery}\n\n━━━━━━━━━━━━━━━━━━━━━\n*🌟 DARKZONE-MD*\n━━━━━━━━━━━━━━━━━━━━━`
         }, { quoted: mek });
 
     } catch (e) {
-        console.error("Check online error:", e);
-        reply("❌ An error occurred while checking online status.");
+        console.error("Pinterest bulk error:", e);
+        reply("❌ An error occurred. Please try again.");
     }
 });
