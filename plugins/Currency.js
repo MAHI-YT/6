@@ -1,5 +1,7 @@
 const { cmd } = require('../command');
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 
 cmd({
     pattern: "geminivoice",
@@ -15,13 +17,11 @@ async (conn, mek, m, { from, args, reply }) => {
         const text = args.join(' ').trim();
         
         if (!text) {
-            return reply(`🎙️ *Gemini Voice AI*\n\n❌ Please provide your question!\n\n*Usage:*\n• \`.geminivoice Hello, how are you?\`\n• \`.gvoice Tell me a joke\`\n• \`.aivoice What is the weather like?\`\n\n_Powered by DARKZONE-MD_`);
+            return reply(`🎙️ *Gemini Voice AI*\n\n❌ Please provide your question!\n\n*Usage:*\n• \`.geminivoice Hello, how are you?\`\n• \`.gvoice Tell me a joke\`\n• \`.aivoice What is AI?\`\n\n_Powered by DARKZONE-MD_`);
         }
 
         // Send processing message
-        const processingMsg = await conn.sendMessage(from, {
-            text: `🎙️ *Gemini Voice AI*\n\n💭 *Your Question:* ${text}\n\n⏳ Generating voice response...\n\n_Please wait..._`
-        }, { quoted: mek });
+        await reply(`🎙️ *Gemini Voice AI*\n\n💭 *Question:* ${text}\n\n⏳ Generating voice response...\n\n_Please wait..._`);
 
         // API Key
         const apiKey = 'freeApikey';
@@ -29,7 +29,7 @@ async (conn, mek, m, { from, args, reply }) => {
         // Call Gemini Voice API
         const apiUrl = `https://anabot.my.id/api/ai/geminiVoice?text=${encodeURIComponent(text)}&apikey=${encodeURIComponent(apiKey)}`;
         
-        console.log(`[GeminiVoice] Calling API: ${apiUrl}`);
+        console.log(`[GeminiVoice] Calling API...`);
 
         let apiResponse;
         try {
@@ -49,15 +49,11 @@ async (conn, mek, m, { from, args, reply }) => {
 
         const data = apiResponse.data;
         
-        console.log(`[GeminiVoice] Response:`, JSON.stringify(data));
+        console.log(`[GeminiVoice] Response received`);
 
         // Validate response
-        if (!data || !data.success) {
+        if (!data || !data.success || !data.data || !data.data.result) {
             return reply("❌ Gemini AI did not respond. Please try again.");
-        }
-
-        if (!data.data || !data.data.result) {
-            return reply("❌ Failed to generate voice response. Please try again.");
         }
 
         const audioUrl = data.data.result;
@@ -86,261 +82,120 @@ async (conn, mek, m, { from, args, reply }) => {
             return reply("❌ Audio file is empty. Please try again.");
         }
 
-        // Delete processing message
+        console.log(`[GeminiVoice] Audio size: ${audioBuffer.length} bytes`);
+
+        // Method 1: Send as Voice Note (PTT)
         try {
-            await conn.sendMessage(from, { delete: processingMsg.key });
-        } catch (e) {}
+            await conn.sendMessage(from, {
+                audio: audioBuffer,
+                mimetype: 'audio/mp4',
+                ptt: true
+            }, { quoted: mek });
+            
+            console.log(`[GeminiVoice] Sent as voice note`);
+            
+            // Send caption
+            await conn.sendMessage(from, {
+                text: `🎙️ *Gemini Voice AI*\n\n💭 *Question:* ${text}\n\n━━━━━━━━━━━━━━━━━━━━━\n*🤖 Powered by DARKZONE-MD*\n━━━━━━━━━━━━━━━━━━━━━`
+            });
+            
+            return;
+        } catch (err1) {
+            console.log(`[GeminiVoice] Method 1 failed: ${err1.message}`);
+        }
 
-        // Send as voice message (PTT - Push To Talk)
-        await conn.sendMessage(from, {
-            audio: audioBuffer,
-            mimetype: 'audio/mpeg',
-            ptt: true  // This makes it a voice note
-        }, { quoted: mek });
+        // Method 2: Send as audio/ogg with opus codec
+        try {
+            await conn.sendMessage(from, {
+                audio: audioBuffer,
+                mimetype: 'audio/ogg; codecs=opus',
+                ptt: true
+            }, { quoted: mek });
+            
+            console.log(`[GeminiVoice] Sent as ogg opus`);
+            
+            await conn.sendMessage(from, {
+                text: `🎙️ *Gemini Voice AI*\n\n💭 *Question:* ${text}\n\n*🤖 DARKZONE-MD*`
+            });
+            
+            return;
+        } catch (err2) {
+            console.log(`[GeminiVoice] Method 2 failed: ${err2.message}`);
+        }
 
-        // Send caption separately
-        await conn.sendMessage(from, {
-            text: `🎙️ *Gemini Voice AI*\n\n💭 *Question:* ${text}\n\n━━━━━━━━━━━━━━━━━━━━━\n*🤖 Powered by DARKZONE-MD*\n━━━━━━━━━━━━━━━━━━━━━`
-        });
+        // Method 3: Send as regular audio (not voice note)
+        try {
+            await conn.sendMessage(from, {
+                audio: audioBuffer,
+                mimetype: 'audio/mpeg',
+                ptt: false
+            }, { quoted: mek });
+            
+            console.log(`[GeminiVoice] Sent as regular audio`);
+            
+            await conn.sendMessage(from, {
+                text: `🎙️ *Gemini Voice AI*\n\n💭 *Question:* ${text}\n\n*🤖 DARKZONE-MD*`
+            });
+            
+            return;
+        } catch (err3) {
+            console.log(`[GeminiVoice] Method 3 failed: ${err3.message}`);
+        }
+
+        // Method 4: Save to file and send
+        try {
+            const tempDir = './temp';
+            if (!fs.existsSync(tempDir)) {
+                fs.mkdirSync(tempDir, { recursive: true });
+            }
+            
+            const tempFile = path.join(tempDir, `gemini_${Date.now()}.mp3`);
+            fs.writeFileSync(tempFile, audioBuffer);
+            
+            await conn.sendMessage(from, {
+                audio: fs.readFileSync(tempFile),
+                mimetype: 'audio/mpeg',
+                ptt: true
+            }, { quoted: mek });
+            
+            // Delete temp file
+            fs.unlinkSync(tempFile);
+            
+            console.log(`[GeminiVoice] Sent from temp file`);
+            
+            await conn.sendMessage(from, {
+                text: `🎙️ *Gemini Voice AI*\n\n💭 *Question:* ${text}\n\n*🤖 DARKZONE-MD*`
+            });
+            
+            return;
+        } catch (err4) {
+            console.log(`[GeminiVoice] Method 4 failed: ${err4.message}`);
+        }
+
+        // Method 5: Send audio URL directly
+        try {
+            await conn.sendMessage(from, {
+                audio: { url: audioUrl },
+                mimetype: 'audio/mpeg',
+                ptt: true
+            }, { quoted: mek });
+            
+            console.log(`[GeminiVoice] Sent from URL`);
+            
+            await conn.sendMessage(from, {
+                text: `🎙️ *Gemini Voice AI*\n\n💭 *Question:* ${text}\n\n*🤖 DARKZONE-MD*`
+            });
+            
+            return;
+        } catch (err5) {
+            console.log(`[GeminiVoice] Method 5 failed: ${err5.message}`);
+        }
+
+        // If all methods fail, send link
+        reply(`✅ *Voice Generated!*\n\n💭 *Question:* ${text}\n\n🔗 *Listen Here:*\n${audioUrl}\n\n_Click to play_\n\n*🤖 DARKZONE-MD*`);
 
     } catch (e) {
         console.error("[GeminiVoice] Error:", e);
         reply("❌ An error occurred. Please try again.\n\n_DARKZONE-MD_");
-    }
-});
-
-// ========== GEMINI VOICE WITH REPLY SUPPORT ==========
-
-cmd({
-    pattern: "askvoice",
-    alias: ["voiceask", "talkto", "askai"],
-    react: "💬",
-    desc: "Ask Gemini AI anything - responds with voice",
-    category: "ai",
-    use: ".askvoice <question> OR reply to message",
-    filename: __filename
-},
-async (conn, mek, m, { from, quoted, args, reply }) => {
-    try {
-        let text = args.join(' ').trim();
-        
-        // If no text provided, check if replying to a message
-        if (!text && quoted && quoted.text) {
-            text = quoted.text;
-        }
-        
-        if (!text) {
-            return reply(`💬 *Ask Voice AI*\n\n❌ Please provide a question!\n\n*Usage:*\n• \`.askvoice What is AI?\`\n• Reply to any message with \`.askvoice\`\n\n_Powered by DARKZONE-MD_`);
-        }
-
-        await reply(`💬 Processing: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"\n\n⏳ Generating voice...`);
-
-        const apiKey = 'freeApikey';
-        const apiUrl = `https://anabot.my.id/api/ai/geminiVoice?text=${encodeURIComponent(text)}&apikey=${encodeURIComponent(apiKey)}`;
-
-        const response = await axios({
-            method: 'GET',
-            url: apiUrl,
-            timeout: 60000,
-            headers: {
-                'User-Agent': 'Mozilla/5.0',
-                'Accept': 'application/json'
-            }
-        });
-
-        if (!response.data || !response.data.success || !response.data.data?.result) {
-            return reply("❌ Failed to get response. Try again.");
-        }
-
-        const audioUrl = response.data.data.result;
-
-        // Download audio
-        const audioBuffer = await axios({
-            method: 'GET',
-            url: audioUrl,
-            responseType: 'arraybuffer',
-            timeout: 30000
-        }).then(res => Buffer.from(res.data));
-
-        // Send voice note
-        await conn.sendMessage(from, {
-            audio: audioBuffer,
-            mimetype: 'audio/mpeg',
-            ptt: true
-        }, { quoted: mek });
-
-    } catch (e) {
-        console.error("[AskVoice] Error:", e.message);
-        reply("❌ Error occurred. Please try again.");
-    }
-});
-
-// ========== GEMINI AUDIO (SENDS AS AUDIO FILE, NOT VOICE) ==========
-
-cmd({
-    pattern: "geminiaudio",
-    alias: ["gaudio", "aiaudio"],
-    react: "🔊",
-    desc: "Get Gemini AI response as audio file",
-    category: "ai",
-    use: ".geminiaudio <question>",
-    filename: __filename
-},
-async (conn, mek, m, { from, args, reply }) => {
-    try {
-        const text = args.join(' ').trim();
-        
-        if (!text) {
-            return reply(`🔊 *Gemini Audio*\n\n❌ Please provide your question!\n\n*Usage:* \`.geminiaudio Hello\`\n\n_Powered by DARKZONE-MD_`);
-        }
-
-        await reply(`🔊 *Generating Audio...*\n\n💭 ${text}\n\n⏳ Please wait...`);
-
-        const apiKey = 'freeApikey';
-        const apiUrl = `https://anabot.my.id/api/ai/geminiVoice?text=${encodeURIComponent(text)}&apikey=${encodeURIComponent(apiKey)}`;
-
-        const response = await axios({
-            method: 'GET',
-            url: apiUrl,
-            timeout: 60000,
-            headers: {
-                'User-Agent': 'Mozilla/5.0',
-                'Accept': 'application/json'
-            }
-        });
-
-        if (!response.data?.success || !response.data?.data?.result) {
-            return reply("❌ Failed to generate audio.");
-        }
-
-        const audioUrl = response.data.data.result;
-
-        // Download audio
-        const audioBuffer = await axios({
-            method: 'GET',
-            url: audioUrl,
-            responseType: 'arraybuffer',
-            timeout: 30000
-        }).then(res => Buffer.from(res.data));
-
-        // Send as audio file (not voice note)
-        await conn.sendMessage(from, {
-            audio: audioBuffer,
-            mimetype: 'audio/mpeg',
-            ptt: false,  // This makes it an audio file, not voice note
-            fileName: 'gemini_response.mp3'
-        }, { quoted: mek });
-
-        await reply(`🔊 *Audio Generated!*\n\n💭 *Query:* ${text}\n\n*🤖 DARKZONE-MD*`);
-
-    } catch (e) {
-        console.error("[GeminiAudio] Error:", e.message);
-        reply("❌ Error occurred. Please try again.");
-    }
-});
-
-// ========== CONVERSATION MODE ==========
-
-const conversationHistory = new Map();
-
-cmd({
-    pattern: "voicechat",
-    alias: ["vchat", "talkvoice"],
-    react: "🗣️",
-    desc: "Have a voice conversation with Gemini AI",
-    category: "ai",
-    use: ".voicechat <message>",
-    filename: __filename
-},
-async (conn, mek, m, { from, sender, args, reply }) => {
-    try {
-        const text = args.join(' ').trim();
-        
-        if (!text) {
-            const hasHistory = conversationHistory.has(sender);
-            return reply(`🗣️ *Voice Chat with Gemini*\n\n❌ Please say something!\n\n*Usage:* \`.voicechat Hi there!\`\n\n${hasHistory ? '💬 _You have an active conversation_\n\nUse `.voiceclear` to reset' : '_Start a new conversation!_'}\n\n_Powered by DARKZONE-MD_`);
-        }
-
-        // Get or create conversation history
-        let history = conversationHistory.get(sender) || [];
-        
-        // Add current message to history
-        history.push(`User: ${text}`);
-        
-        // Keep only last 5 messages for context
-        if (history.length > 5) {
-            history = history.slice(-5);
-        }
-        
-        // Create context-aware prompt
-        const contextPrompt = history.join('\n') + '\nAI:';
-
-        await reply(`🗣️ *Processing...*\n\n💭 "${text}"\n\n⏳ Generating response...`);
-
-        const apiKey = 'freeApikey';
-        const apiUrl = `https://anabot.my.id/api/ai/geminiVoice?text=${encodeURIComponent(contextPrompt)}&apikey=${encodeURIComponent(apiKey)}`;
-
-        const response = await axios({
-            method: 'GET',
-            url: apiUrl,
-            timeout: 60000,
-            headers: {
-                'User-Agent': 'Mozilla/5.0',
-                'Accept': 'application/json'
-            }
-        });
-
-        if (!response.data?.success || !response.data?.data?.result) {
-            return reply("❌ Failed to get response.");
-        }
-
-        const audioUrl = response.data.data.result;
-
-        // Download audio
-        const audioBuffer = await axios({
-            method: 'GET',
-            url: audioUrl,
-            responseType: 'arraybuffer',
-            timeout: 30000
-        }).then(res => Buffer.from(res.data));
-
-        // Update history
-        history.push(`AI: [Voice Response]`);
-        conversationHistory.set(sender, history);
-
-        // Send voice response
-        await conn.sendMessage(from, {
-            audio: audioBuffer,
-            mimetype: 'audio/mpeg',
-            ptt: true
-        }, { quoted: mek });
-
-    } catch (e) {
-        console.error("[VoiceChat] Error:", e.message);
-        reply("❌ Error occurred. Please try again.");
-    }
-});
-
-// ========== CLEAR CONVERSATION ==========
-
-cmd({
-    pattern: "voiceclear",
-    alias: ["clearvconvo", "resetvoice"],
-    react: "🗑️",
-    desc: "Clear voice chat conversation history",
-    category: "ai",
-    use: ".voiceclear",
-    filename: __filename
-},
-async (conn, mek, m, { sender, reply }) => {
-    try {
-        if (conversationHistory.has(sender)) {
-            conversationHistory.delete(sender);
-            reply("✅ *Conversation Cleared!*\n\n🗑️ Your voice chat history has been reset.\n\n_Start a new conversation with `.voicechat`_\n\n*DARKZONE-MD*");
-        } else {
-            reply("ℹ️ No active conversation to clear.\n\n*DARKZONE-MD*");
-        }
-    } catch (e) {
-        reply("❌ Error occurred.");
     }
 });
