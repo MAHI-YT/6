@@ -1,360 +1,286 @@
+
 const { cmd } = require('../command');
 const axios = require('axios');
 
 cmd({
-    pattern: "pinterestimg",
-    alias: ["pinimg", "pinimg", "pinterestdlimg", "pindl"],
+    pattern: "pinterest",
+    alias: ["pin", "pinimg", "pinterestdl", "pindl"],
     react: "📌",
-    desc: "Download images from Pinterest. Search by keyword or provide direct link.",
+    desc: "Download images from Pinterest by search query",
     category: "download",
-    use: ".pinterest <search query> OR .pinterest <pinterest link>",
+    use: ".pinterest <search query>",
     filename: __filename
 },
 async (conn, mek, m, { from, args, reply }) => {
     try {
-        // Check if query/link is provided
-        const input = args.join(' ').trim();
+        // Check if query is provided
+        const query = args.join(' ').trim();
         
-        if (!input) {
-            return reply(`📌 *Pinterest Image Downloader*\n\n❌ Please provide a search query or Pinterest link!\n\n*Usage:*\n• \`.pinterest anime girl\`\n• \`.pinterest cats\`\n• \`.pinterest https://pinterest.com/pin/xxx\`\n\n_Powered by DARKZONE-MD_`);
+        if (!query) {
+            return reply(`📌 *Pinterest Image Downloader*\n\n❌ Please provide a search query!\n\n*Usage:*\n• \`.pinterest anime girl\`\n• \`.pinterest cats\`\n• \`.pin wallpaper\`\n\n_Powered by DARKZONE-MD_`);
         }
 
-        // Check if input is a link or search query
-        const isLink = input.startsWith('http://') || input.startsWith('https://') || input.includes('pinterest.com') || input.includes('pin.it');
+        // Send processing message
+        await reply(`📌 *Pinterest Search*\n\n🔍 Searching: *${query}*\n⏳ Please wait...`);
 
-        let processingMsg;
-
-        // ========== FEATURE 1: SEARCH BY KEYWORD ==========
-        if (!isLink) {
-            processingMsg = await conn.sendMessage(from, {
-                text: `📌 *Pinterest Search*\n\n🔍 Searching for: *${input}*\n\n⏳ Please wait...`
-            }, { quoted: mek });
-
-            // Call Pinterest API with search query
-            let apiResponse;
-            try {
-                apiResponse = await axios.get(`https://api-faa.my.id/faa/pinterest?query=${encodeURIComponent(input)}`, {
-                    timeout: 30000
-                });
-            } catch (apiErr) {
-                console.error("Pinterest API Error:", apiErr.message);
-                return reply("❌ Failed to search Pinterest. API might be down. Please try again later.");
-            }
-
-            // Validate response
-            if (!apiResponse.data || !apiResponse.data.status) {
-                return reply("❌ No results found. Please try a different search query.");
-            }
-
-            const images = apiResponse.data.result;
-
-            if (!images || images.length === 0) {
-                return reply(`❌ No images found for "*${input}*". Try a different search query.`);
-            }
-
-            // Delete processing message
-            try {
-                await conn.sendMessage(from, { delete: processingMsg.key });
-            } catch (e) {}
-
-            // Send info message
-            await conn.sendMessage(from, {
-                text: `📌 *Pinterest Search Results*\n\n🔍 *Query:* ${input}\n📷 *Images Found:* ${images.length}\n\n⏳ Sending images...`
-            }, { quoted: mek });
-
-            // Send images (limit to 5 to avoid spam)
-            const maxImages = Math.min(images.length, 5);
-            let sentCount = 0;
-
-            for (let i = 0; i < maxImages; i++) {
-                try {
-                    const imageUrl = images[i];
-                    
-                    // Download image
-                    const imageResponse = await axios.get(imageUrl, {
-                        responseType: 'arraybuffer',
-                        timeout: 30000
-                    });
-
-                    const imageBuffer = Buffer.from(imageResponse.data);
-
-                    // Send image
-                    await conn.sendMessage(from, {
-                        image: imageBuffer,
-                        caption: `📌 *Pinterest Image ${i + 1}/${maxImages}*\n\n🔍 *Search:* ${input}\n🔗 *Source:* Pinterest\n\n━━━━━━━━━━━━━━━━━━━━━\n*📥 Downloaded by DARKZONE-MD*\n━━━━━━━━━━━━━━━━━━━━━`
-                    }, { quoted: mek });
-
-                    sentCount++;
-                    
-                    // Small delay between images
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-
-                } catch (imgErr) {
-                    console.error(`Failed to send image ${i + 1}:`, imgErr.message);
-                    continue;
-                }
-            }
-
-            // Final summary message
-            if (sentCount > 0) {
-                await conn.sendMessage(from, {
-                    text: `✅ *Download Complete!*\n\n📷 *Sent:* ${sentCount} images\n🔍 *Query:* ${input}\n\n💡 _Use \`.pinterest ${input} more\` for different images_\n\n*🌟 DARKZONE-MD*`
-                }, { quoted: mek });
-            } else {
-                reply("❌ Failed to download images. Please try again.");
-            }
-
-        }
+        // Try different parameter names
+        let apiResponse;
+        let success = false;
         
-        // ========== FEATURE 2: DOWNLOAD FROM LINK ==========
-        else {
-            processingMsg = await conn.sendMessage(from, {
-                text: `📌 *Pinterest Link Download*\n\n🔗 Processing link...\n\n⏳ Please wait...`
-            }, { quoted: mek });
-
-            // Call Pinterest API with link
-            let apiResponse;
+        const paramNames = ['query', 'q', 'search', 'text'];
+        
+        for (const param of paramNames) {
+            if (success) break;
+            
             try {
-                apiResponse = await axios.get(`https://api-faa.my.id/faa/pinterest?url=${encodeURIComponent(input)}`, {
-                    timeout: 30000
-                });
-            } catch (apiErr) {
-                console.error("Pinterest API Error:", apiErr.message);
+                const url = `https://api-faa.my.id/faa/pinterest?${param}=${encodeURIComponent(query)}`;
+                console.log(`[Pinterest] Trying: ${url}`);
                 
-                // If URL method fails, try as search (some APIs work differently)
-                try {
-                    apiResponse = await axios.get(`https://api-faa.my.id/faa/pinterest?query=${encodeURIComponent(input)}`, {
-                        timeout: 30000
-                    });
-                } catch (err2) {
-                    return reply("❌ Failed to download from this link. Please try again or use search instead.");
+                apiResponse = await axios({
+                    method: 'GET',
+                    url: url,
+                    timeout: 30000,
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                if (apiResponse.data && apiResponse.data.status === true && apiResponse.data.result) {
+                    success = true;
+                    console.log(`[Pinterest] Success with param: ${param}`);
                 }
-            }
-
-            // Validate response
-            if (!apiResponse.data || !apiResponse.data.status) {
-                return reply("❌ Failed to get image from this link. Please check the URL.");
-            }
-
-            const images = apiResponse.data.result;
-
-            if (!images || images.length === 0) {
-                return reply("❌ No image found at this link. Please check the URL.");
-            }
-
-            // Delete processing message
-            try {
-                await conn.sendMessage(from, { delete: processingMsg.key });
-            } catch (e) {}
-
-            // Get first image (for link download usually returns 1 image)
-            const imageUrl = Array.isArray(images) ? images[0] : images;
-
-            // Download image
-            let imageBuffer;
-            try {
-                const imageResponse = await axios.get(imageUrl, {
-                    responseType: 'arraybuffer',
-                    timeout: 30000
-                });
-                imageBuffer = Buffer.from(imageResponse.data);
-            } catch (downloadErr) {
-                console.error("Image download error:", downloadErr.message);
-                return reply(`❌ Failed to download image.\n\n🔗 *Direct Link:*\n${imageUrl}\n\n_Try opening in browser_`);
-            }
-
-            // Send image
-            await conn.sendMessage(from, {
-                image: imageBuffer,
-                caption: `📌 *Pinterest Image Downloaded*\n\n🔗 *Source:* Pinterest\n📥 *Status:* Success ✅\n\n━━━━━━━━━━━━━━━━━━━━━\n*📥 Downloaded by DARKZONE-MD*\n━━━━━━━━━━━━━━━━━━━━━`
-            }, { quoted: mek });
-
-        }
-
-    } catch (e) {
-        console.error("Pinterest command error:", e);
-        reply("❌ An unexpected error occurred. Please try again later.");
-    }
-});
-
-// ========== PINTEREST RANDOM IMAGE ==========
-
-cmd({
-    pattern: "pinrandom",
-    alias: ["randompin", "randompinterest"],
-    react: "🎲",
-    desc: "Get random Pinterest images by category",
-    category: "download",
-    use: ".pinrandom <category>",
-    filename: __filename
-},
-async (conn, mek, m, { from, args, reply }) => {
-    try {
-        const category = args.join(' ').trim();
-
-        if (!category) {
-            return reply(`🎲 *Pinterest Random Images*\n\n❌ Please provide a category!\n\n*Popular Categories:*\n• anime\n• nature\n• cars\n• aesthetic\n• quotes\n• wallpaper\n• art\n• fashion\n\n*Usage:* \`.pinrandom anime\`\n\n_Powered by DARKZONE-MD_`);
-        }
-
-        const processingMsg = await conn.sendMessage(from, {
-            text: `🎲 *Getting Random Images...*\n\n📂 Category: *${category}*\n⏳ Please wait...`
-        }, { quoted: mek });
-
-        // Call API
-        let apiResponse;
-        try {
-            apiResponse = await axios.get(`https://api-faa.my.id/faa/pinterest?query=${encodeURIComponent(category)}`, {
-                timeout: 30000
-            });
-        } catch (apiErr) {
-            return reply("❌ Failed to fetch images. Please try again.");
-        }
-
-        if (!apiResponse.data || !apiResponse.data.status || !apiResponse.data.result) {
-            return reply("❌ No images found for this category.");
-        }
-
-        const images = apiResponse.data.result;
-
-        if (images.length === 0) {
-            return reply("❌ No images found. Try a different category.");
-        }
-
-        // Delete processing message
-        try {
-            await conn.sendMessage(from, { delete: processingMsg.key });
-        } catch (e) {}
-
-        // Get random image from results
-        const randomIndex = Math.floor(Math.random() * images.length);
-        const randomImageUrl = images[randomIndex];
-
-        // Download and send
-        try {
-            const imageResponse = await axios.get(randomImageUrl, {
-                responseType: 'arraybuffer',
-                timeout: 30000
-            });
-
-            const imageBuffer = Buffer.from(imageResponse.data);
-
-            await conn.sendMessage(from, {
-                image: imageBuffer,
-                caption: `🎲 *Random Pinterest Image*\n\n📂 *Category:* ${category}\n🔢 *Total Available:* ${images.length}\n\n━━━━━━━━━━━━━━━━━━━━━\n*📥 Downloaded by DARKZONE-MD*\n━━━━━━━━━━━━━━━━━━━━━\n\n_Use \`.pinrandom ${category}\` for another random image_`
-            }, { quoted: mek });
-
-        } catch (err) {
-            reply("❌ Failed to download the random image. Please try again.");
-        }
-
-    } catch (e) {
-        console.error("Pinterest random error:", e);
-        reply("❌ An error occurred. Please try again.");
-    }
-});
-
-// ========== PINTEREST BULK DOWNLOAD ==========
-
-cmd({
-    pattern: "pinbulk",
-    alias: ["pinterestbulk", "pinall"],
-    react: "📦",
-    desc: "Download multiple Pinterest images at once",
-    category: "download",
-    use: ".pinbulk <search> <count>",
-    filename: __filename
-},
-async (conn, mek, m, { from, args, reply }) => {
-    try {
-        if (args.length < 1) {
-            return reply(`📦 *Pinterest Bulk Download*\n\n❌ Please provide search query and count!\n\n*Usage:*\n• \`.pinbulk anime 10\`\n• \`.pinbulk cars 5\`\n\n*Max:* 15 images\n\n_Powered by DARKZONE-MD_`);
-        }
-
-        // Parse arguments
-        let count = 5; // Default
-        let searchQuery = args.join(' ');
-
-        // Check if last argument is a number
-        const lastArg = args[args.length - 1];
-        if (!isNaN(lastArg)) {
-            count = parseInt(lastArg);
-            searchQuery = args.slice(0, -1).join(' ');
-        }
-
-        // Limit count
-        count = Math.min(Math.max(count, 1), 15);
-
-        if (!searchQuery) {
-            return reply("❌ Please provide a search query!");
-        }
-
-        const processingMsg = await conn.sendMessage(from, {
-            text: `📦 *Pinterest Bulk Download*\n\n🔍 *Search:* ${searchQuery}\n📷 *Requested:* ${count} images\n\n⏳ Downloading...`
-        }, { quoted: mek });
-
-        // Call API
-        let apiResponse;
-        try {
-            apiResponse = await axios.get(`https://api-faa.my.id/faa/pinterest?query=${encodeURIComponent(searchQuery)}`, {
-                timeout: 30000
-            });
-        } catch (apiErr) {
-            return reply("❌ Failed to fetch images. Please try again.");
-        }
-
-        if (!apiResponse.data || !apiResponse.data.status || !apiResponse.data.result) {
-            return reply("❌ No images found.");
-        }
-
-        const images = apiResponse.data.result;
-        const actualCount = Math.min(count, images.length);
-
-        // Delete processing message
-        try {
-            await conn.sendMessage(from, { delete: processingMsg.key });
-        } catch (e) {}
-
-        // Send progress message
-        await conn.sendMessage(from, {
-            text: `📦 *Starting Bulk Download...*\n\n🔍 *Query:* ${searchQuery}\n📷 *Sending:* ${actualCount} images\n\n⏳ Please wait...`
-        }, { quoted: mek });
-
-        let successCount = 0;
-
-        for (let i = 0; i < actualCount; i++) {
-            try {
-                const imageUrl = images[i];
-
-                const imageResponse = await axios.get(imageUrl, {
-                    responseType: 'arraybuffer',
-                    timeout: 30000
-                });
-
-                const imageBuffer = Buffer.from(imageResponse.data);
-
-                await conn.sendMessage(from, {
-                    image: imageBuffer,
-                    caption: `📌 *[${i + 1}/${actualCount}]*\n\n🔍 *Search:* ${searchQuery}\n\n━━━━━━━━━━━━━━━━━━━━━\n*📥 DARKZONE-MD*\n━━━━━━━━━━━━━━━━━━━━━`
-                }, { quoted: mek });
-
-                successCount++;
-
-                // Delay between sends
-                await new Promise(resolve => setTimeout(resolve, 1500));
-
             } catch (err) {
-                console.error(`Failed to send image ${i + 1}:`, err.message);
+                console.log(`[Pinterest] Failed with ${param}: ${err.message}`);
                 continue;
             }
         }
 
-        // Final message
+        // If all params failed, try without any specific param handling
+        if (!success) {
+            try {
+                apiResponse = await axios.get(`https://api-faa.my.id/faa/pinterest`, {
+                    params: { query: query },
+                    timeout: 30000,
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    }
+                });
+                
+                if (apiResponse.data && apiResponse.data.result) {
+                    success = true;
+                }
+            } catch (err) {
+                console.log(`[Pinterest] Final attempt failed: ${err.message}`);
+            }
+        }
+
+        // Check if we got results
+        if (!success || !apiResponse || !apiResponse.data) {
+            return reply("❌ Failed to connect to Pinterest API. Please try again.");
+        }
+
+        const data = apiResponse.data;
+        
+        // Handle different response formats
+        let images = [];
+        
+        if (Array.isArray(data.result)) {
+            images = data.result;
+        } else if (Array.isArray(data)) {
+            images = data;
+        } else if (typeof data.result === 'string') {
+            images = [data.result];
+        }
+
+        if (images.length === 0) {
+            return reply(`❌ No images found for "*${query}*". Try a different search.`);
+        }
+
+        // Send images (max 5)
+        const maxImages = Math.min(images.length, 5);
+        let sentCount = 0;
+
+        for (let i = 0; i < maxImages; i++) {
+            try {
+                const imageUrl = images[i];
+                
+                // Validate URL
+                if (!imageUrl || !imageUrl.startsWith('http')) {
+                    continue;
+                }
+
+                // Download image
+                const imageBuffer = await axios.get(imageUrl, {
+                    responseType: 'arraybuffer',
+                    timeout: 30000,
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    }
+                }).then(res => Buffer.from(res.data));
+
+                // Send image
+                await conn.sendMessage(from, {
+                    image: imageBuffer,
+                    caption: `📌 *Pinterest Image [${i + 1}/${maxImages}]*\n\n🔍 *Search:* ${query}\n\n━━━━━━━━━━━━━━━━━━━━━\n*📥 Downloaded by DARKZONE-MD*\n━━━━━━━━━━━━━━━━━━━━━`
+                }, { quoted: mek });
+
+                sentCount++;
+                
+                // Delay
+                await new Promise(r => setTimeout(r, 1000));
+
+            } catch (imgErr) {
+                console.error(`[Pinterest] Image ${i + 1} failed:`, imgErr.message);
+                continue;
+            }
+        }
+
+        if (sentCount === 0) {
+            return reply("❌ Failed to download images. Please try again.");
+        }
+
+        // Success message
+        await reply(`✅ *Download Complete!*\n\n📷 Sent: ${sentCount} images\n🔍 Query: ${query}\n\n*🌟 DARKZONE-MD*`);
+
+    } catch (e) {
+        console.error("[Pinterest] Error:", e);
+        reply("❌ An error occurred. Please try again.");
+    }
+});
+
+// ========== SINGLE PINTEREST IMAGE ==========
+
+cmd({
+    pattern: "pin1",
+    alias: ["pinterest1", "onepin"],
+    react: "📌",
+    desc: "Get single Pinterest image",
+    category: "download",
+    use: ".pin1 <search>",
+    filename: __filename
+},
+async (conn, mek, m, { from, args, reply }) => {
+    try {
+        const query = args.join(' ').trim();
+        
+        if (!query) {
+            return reply("❌ Please provide search query!\n\n*Usage:* `.pin1 anime`");
+        }
+
+        await reply("🔍 Searching...");
+
+        // Call API
+        const response = await axios({
+            method: 'GET',
+            url: `https://api-faa.my.id/faa/pinterest`,
+            params: { query: query },
+            timeout: 30000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0'
+            }
+        });
+
+        const data = response.data;
+        
+        if (!data || !data.result || data.result.length === 0) {
+            return reply("❌ No images found.");
+        }
+
+        // Get random image
+        const images = data.result;
+        const randomImage = images[Math.floor(Math.random() * images.length)];
+
+        // Download and send
+        const imageBuffer = await axios.get(randomImage, {
+            responseType: 'arraybuffer',
+            timeout: 30000
+        }).then(res => Buffer.from(res.data));
+
         await conn.sendMessage(from, {
-            text: `✅ *Bulk Download Complete!*\n\n📷 *Downloaded:* ${successCount}/${actualCount}\n🔍 *Query:* ${searchQuery}\n\n━━━━━━━━━━━━━━━━━━━━━\n*🌟 DARKZONE-MD*\n━━━━━━━━━━━━━━━━━━━━━`
+            image: imageBuffer,
+            caption: `📌 *Pinterest*\n\n🔍 *Search:* ${query}\n📷 *Total Found:* ${images.length}\n\n━━━━━━━━━━━━━━━━━━━━━\n*📥 DARKZONE-MD*\n━━━━━━━━━━━━━━━━━━━━━`
         }, { quoted: mek });
 
     } catch (e) {
-        console.error("Pinterest bulk error:", e);
-        reply("❌ An error occurred. Please try again.");
+        console.error("[Pin1] Error:", e.message);
+        reply("❌ Failed. Error: " + e.message);
+    }
+});
+
+// ========== PINTEREST WITH COUNT ==========
+
+cmd({
+    pattern: "pindl",
+    alias: ["pinget", "getpin"],
+    react: "📦",
+    desc: "Download specific number of Pinterest images",
+    category: "download", 
+    use: ".pindl <count> <search>",
+    filename: __filename
+},
+async (conn, mek, m, { from, args, reply }) => {
+    try {
+        if (args.length < 2) {
+            return reply("❌ *Usage:* `.pindl 5 anime`\n\n_First number, then search query_");
+        }
+
+        const count = parseInt(args[0]);
+        const query = args.slice(1).join(' ').trim();
+
+        if (isNaN(count) || count < 1) {
+            return reply("❌ Please provide valid number!\n\n*Example:* `.pindl 3 cats`");
+        }
+
+        if (!query) {
+            return reply("❌ Please provide search query!");
+        }
+
+        const maxCount = Math.min(count, 10); // Max 10
+
+        await reply(`📦 *Downloading ${maxCount} images...*\n\n🔍 Search: ${query}`);
+
+        // Call API
+        const response = await axios({
+            method: 'GET', 
+            url: `https://api-faa.my.id/faa/pinterest`,
+            params: { query: query },
+            timeout: 30000,
+            headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+
+        if (!response.data || !response.data.result) {
+            return reply("❌ No results found.");
+        }
+
+        const images = response.data.result;
+        const actualCount = Math.min(maxCount, images.length);
+        let sent = 0;
+
+        for (let i = 0; i < actualCount; i++) {
+            try {
+                const imgBuffer = await axios.get(images[i], {
+                    responseType: 'arraybuffer',
+                    timeout: 30000
+                }).then(r => Buffer.from(r.data));
+
+                await conn.sendMessage(from, {
+                    image: imgBuffer,
+                    caption: `📌 *[${i + 1}/${actualCount}]* - ${query}\n\n*📥 DARKZONE-MD*`
+                }, { quoted: mek });
+
+                sent++;
+                await new Promise(r => setTimeout(r, 1500));
+
+            } catch (e) {
+                continue;
+            }
+        }
+
+        await reply(`✅ *Done!* Sent ${sent}/${actualCount} images\n\n*🌟 DARKZONE-MD*`);
+
+    } catch (e) {
+        console.error("[PinDL] Error:", e.message);
+        reply("❌ Error: " + e.message);
     }
 });
