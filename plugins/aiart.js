@@ -3,8 +3,8 @@ const { cmd } = require('../command');
 const axios = require('axios');
 
 cmd({
-    pattern: "pinterest",
-    alias: ["pin", "pinimg", "pinterestdl", "pindl"],
+    pattern: "pinterestimg",
+    alias: ["pinimg", "pinimg", "pinterestdl", "pindl"],
     react: "📌",
     desc: "Download images from Pinterest by search query",
     category: "download",
