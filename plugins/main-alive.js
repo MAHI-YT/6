@@ -22,7 +22,7 @@ async (conn, mek, m, { from, sender, reply }) => {
         const startTime = Date.now();
         
         // Video Note URL (Round Video) - You can change this URL
-        const videoNoteUrl = "https://telegra.ph/file/8e57c498cf41572e19a21.mp4"; // Sample round video
+        const videoNoteUrl = "https://files.catbox.moe/t9dj8o.mp4"; // Sample round video
         
         // Alternative video URLs (choose one):
         // const videoNoteUrl = "https://i.imgur.com/your-video.mp4";
