@@ -59,10 +59,7 @@ async (conn, mek, m, { from, sender, reply }) => {
 ┃ 🧠 ʀᴀᴍ: ${usedMemory}MB
 ┃ 💾 ᴛᴏᴛᴀʟ: ${totalMemory}GB
 ┃ 🖥️ ᴘʟᴀᴛғᴏʀᴍ: ${platform}
-┗━━━━━━━━━━━━━┛
-
-> ⌨️ ᴛʏᴘᴇ *${prefix}menu* ғᴏʀ ᴄᴏᴍᴍᴀɴᴅs
-> 🌟 *${botName}* - ᴀʟᴡᴀʏs ᴏɴʟɪɴᴇ!`;
+┗━━━━━━━━━━━━━┛`;
 
         // Send alive message with IMAGE and CHANNEL link
         const sentMessage = await conn.sendMessage(from, {
