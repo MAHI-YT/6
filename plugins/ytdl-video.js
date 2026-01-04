@@ -13,24 +13,67 @@ cmd({
     try {
         if (!q) return await reply("🎥 Please provide a YouTube video name or URL!\n\nExample: `.video pal pal`");
 
-        // ✅ MOVED THIS FUNCTION TO TOP (BEFORE IT'S USED)
+        // Function to check if it's a YouTube URL
+        function isYouTubeUrl(text) {
+            return text.includes("youtube.com") || text.includes("youtu.be");
+        }
+
+        // Function to extract video ID from various YouTube URL formats
         function getVideoId(url) {
-            const match = url.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/);
-            return match ? match[1] : null;
+            let videoId = null;
+            
+            // youtube.com/watch?v=VIDEO_ID
+            if (url.includes("youtube.com/watch")) {
+                const match = url.match(/[?&]v=([^&\s]+)/);
+                if (match) videoId = match[1];
+            }
+            // youtu.be/VIDEO_ID
+            else if (url.includes("youtu.be/")) {
+                const match = url.match(/youtu\.be\/([^?\s&]+)/);
+                if (match) videoId = match[1];
+            }
+            // youtube.com/shorts/VIDEO_ID
+            else if (url.includes("youtube.com/shorts/")) {
+                const match = url.match(/shorts\/([^?\s&]+)/);
+                if (match) videoId = match[1];
+            }
+            // youtube.com/embed/VIDEO_ID
+            else if (url.includes("youtube.com/embed/")) {
+                const match = url.match(/embed\/([^?\s&]+)/);
+                if (match) videoId = match[1];
+            }
+            // youtube.com/v/VIDEO_ID
+            else if (url.includes("youtube.com/v/")) {
+                const match = url.match(/\/v\/([^?\s&]+)/);
+                if (match) videoId = match[1];
+            }
+            // youtube.com/live/VIDEO_ID
+            else if (url.includes("youtube.com/live/")) {
+                const match = url.match(/live\/([^?\s&]+)/);
+                if (match) videoId = match[1];
+            }
+            
+            return videoId;
         }
 
         let url = q;
         let videoInfo = null;
 
         // Detect if it's a URL or a title
-        if (q.startsWith('http://') || q.startsWith('https://')) {
-            if (!q.includes("youtube.com") && !q.includes("youtu.be")) {
-                return await reply("❌ Please provide a valid YouTube URL!");
-            }
+        if (isYouTubeUrl(q)) {
             const videoId = getVideoId(q);
             if (!videoId) return await reply("❌ Invalid YouTube URL!");
-            const searchFromUrl = await yts({ videoId: videoId });
-            videoInfo = searchFromUrl;
+            
+            // Search for video info using videoId
+            const searchResult = await yts({ videoId: videoId });
+            if (!searchResult) {
+                return await reply("❌ Could not fetch video information!");
+            }
+            videoInfo = searchResult;
+            
+            // Make sure we have a proper URL for API
+            url = `https://www.youtube.com/watch?v=${videoId}`;
+            
         } else {
             const search = await yts(q);
             if (!search.videos || search.videos.length === 0) {
