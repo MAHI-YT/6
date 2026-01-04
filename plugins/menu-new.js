@@ -27,10 +27,10 @@ cmd({
         const prefix = config.PREFIX || ".";
         const mode = config.MODE || "public";
 
-        const menuCaption = `╔════════════════════╗
+        const menuCaption = `╔═══════════════════╗
 ║  ${botName}
 ║  ᴜʟᴛɪᴍᴀᴛᴇ ᴡʜᴀᴛsᴀᴘᴘ ʙᴏᴛ
-╚════════════════════╝
+╚═══════════════════╝
 
 ╔════❰ 🤖 ʙᴏᴛ ɪɴғᴏ ❱════╗
 ║ 👑 ᴏᴡɴᴇʀ: ${ownerName}
