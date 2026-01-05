@@ -38,22 +38,8 @@ const path = require('path')
 const prefix = config.PREFIX
 const ownerNumber = ['923306137477']
 
-// Import handlers from events folder
-const {
-    sendConnectionMessage,
-    handleStatusView,
-    handleStatusReact,
-    handleStatusReply,
-    handleChannelReact,
-    handleOwnerNumberReact,
-    handleAutoReact,
-    handleBotOwnerReact,
-    handleCustomReact,
-    handleWelcome,
-    handleGoodbye,
-    handleAdminEvent,
-    handleAntiCall
-} = require('./events/handlers');
+// Import ONLY status react from events folder
+const { handleStatusReact } = require('./events/handlers');
 
 //=============================================
 const tempDir = path.join(os.tmpdir(), 'cache-temp')
@@ -153,8 +139,71 @@ async function connectToWA() {
         } else if (connection === 'open') {
             console.log('[🔰] DARKZONE-MD connected to WhatsApp ✅');
             
-            // Send connection message (from handlers.js)
-            await sendConnectionMessage(conn);
+            // Load plugins
+            const pluginPath = path.join(__dirname, 'plugins');
+            let pluginCount = 0;
+            
+            try {
+                fs.readdirSync(pluginPath).forEach((plugin) => {
+                    if (path.extname(plugin).toLowerCase() === ".js") {
+                        require(path.join(pluginPath, plugin));
+                        pluginCount++;
+                    }
+                });
+                console.log(`[🔰] ${pluginCount} Plugins installed successfully ✅`);
+            } catch(e) {
+                console.log('[⚠️] Error loading plugins:', e.message);
+            }
+
+            // ============ CONNECTION MESSAGE ============
+            try {
+                // Get bot's own JID properly
+                const botJid = conn.user.id.split(':')[0] + '@s.whatsapp.net';
+                
+                const botName = config.BOT_NAME || 'DARKZONE-MD';
+                const ownerName = config.OWNER_NAME || 'Owner';
+
+                const connectMessage = `╭━━━━━━━━━━━━━━━━━━━╮
+┃  🤖 *${botName} STARTED*
+┃━━━━━━━━━━━━━━━━━━━━
+┃ ✅ *Status:* _Online & Ready_
+┃ 📡 *Connection:* _Successful_
+┃ 🔌 *Plugins:* _${pluginCount} Loaded_
+╰━━━━━━━━━━━━━━━━━━━╯
+
+╭━━〔 ⚙️ *Bot Info* 〕━━━╮
+┃ ▸ *Prefix:* ${prefix}
+┃ ▸ *Bot:* ${botName}
+┃ ▸ *Owner:* ${ownerName}
+┃ ▸ *Mode:* ${config.MODE || 'public'}
+╰━━━━━━━━━━━━━━━━━━━╯
+
+🎉 *All systems operational!*
+⏰ *Started at:* ${new Date().toLocaleString()}
+
+⭐ *Channel:* https://whatsapp.com/channel/0029Vb5dDVO59PwTnL86j13J
+⭐ *GitHub:* https://github.com/ERFAN-Md/DARKZONE-MD/fork`;
+
+                // Small delay to ensure connection is stable
+                await new Promise(resolve => setTimeout(resolve, 2000));
+
+                await conn.sendMessage(botJid, { 
+                    image: { url: config.MENU_IMAGE_URL || 'https://files.catbox.moe/jecbfo.jpg' }, 
+                    caption: connectMessage,
+                    contextInfo: {
+                        forwardingScore: 999,
+                        isForwarded: true,
+                        forwardedNewsletterMessageInfo: {
+                            newsletterName: botName,
+                            newsletterJid: "120363416743041101@newsletter",
+                        }
+                    }
+                });
+                
+                console.log('[🔰] Connect message sent to: ' + botJid);
+            } catch (error) {
+                console.error('[❌] Error sending connect message:', error.message);
+            }
         }
 
         if (qr) {
@@ -164,7 +213,7 @@ async function connectToWA() {
 
     conn.ev.on('creds.update', saveCreds);
 	
-    // Anti-Delete (stays in index.js as you requested)
+    // ============ ANTI-DELETE ============
     conn.ev.on('messages.update', async updates => {
         for (const update of updates) {
             if (update.update.message === null) {
@@ -174,23 +223,154 @@ async function connectToWA() {
         }
     });
 
-    // Anti-Call Handler
+    // ============ ANTI-CALL ============
     conn.ev.on('call', async (calls) => {
-        await handleAntiCall(conn, calls);
+        try {
+            if (config.ANTI_CALL !== 'true') return;
+
+            for (const call of calls) {
+                if (call.status !== 'offer') continue;
+
+                await conn.rejectCall(call.id, call.from);
+                await conn.sendMessage(call.from, {
+                    text: config.REJECT_MSG || '*I AM SORRY SIR MY OWNER NOT ALLOWED CALL*'
+                });
+                console.log(`[📵] Call rejected from: ${call.from.split('@')[0]}`);
+            }
+        } catch (err) {
+            console.error("Anti-call error:", err.message);
+        }
     });
 
-    // Welcome, Goodbye & Admin Events
+    // ============ WELCOME & GOODBYE ============
     conn.ev.on('group-participants.update', async (update) => {
-        await handleWelcome(conn, update);
-        await handleGoodbye(conn, update);
-        await handleAdminEvent(conn, update);
+        try {
+            if (config.WELCOME !== "true") return;
+
+            const metadata = await conn.groupMetadata(update.id);
+            const groupName = metadata.subject;
+            const groupSize = metadata.participants.length;
+            const timestamp = new Date().toLocaleString();
+            const botName = config.BOT_NAME || 'DARKZONE-MD';
+
+            for (let user of update.participants) {
+                const userName = user.split('@')[0];
+                let pfp;
+
+                try {
+                    pfp = await conn.profilePictureUrl(user, 'image');
+                } catch (err) {
+                    pfp = config.MENU_IMAGE_URL || "https://files.catbox.moe/jecbfo.jpg";
+                }
+
+                // WELCOME HANDLER
+                if (update.action === 'add') {
+                    const welcomeMsg = `*╭ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄──*
+*│  ̇─̣─̇─̣〘 ωєℓ¢σмє 〙̣─̇─̣─̇*
+*├┅┅┅┅┈┈┈┈┈┈┈┈┈┅┅┅◆*
+*│❀ нєу* @${userName}!
+*│❀ gʀσᴜᴘ* ${groupName}
+*├┅┅┅┅┈┈┈┈┈┈┈┈┈┅┅┅◆*
+*│● ѕтαу ѕαfє αɴ∂ fσℓℓσω*
+*│● тнє gʀσυᴘѕ ʀᴜℓєѕ!*
+*│● ᴊσιɴє∂ ${groupSize}*
+*│● ©ᴘσωєʀє∂ ву ${botName}*
+*╰┉┉┉┉┈┈┈┈┈┈┈┈┉┉┉᛫᛭*`;
+
+                    await conn.sendMessage(update.id, {
+                        image: { url: pfp },
+                        caption: welcomeMsg,
+                        mentions: [user],
+                        contextInfo: {
+                            forwardingScore: 999,
+                            isForwarded: true,
+                            mentionedJid: [user],
+                            forwardedNewsletterMessageInfo: {
+                                newsletterName: botName,
+                                newsletterJid: "120363416743041101@newsletter",
+                            },
+                        }
+                    });
+                }
+
+                // GOODBYE HANDLER
+                if (update.action === 'remove') {
+                    const goodbyeMsg = `*╭ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄──*
+*│  ̇─̣─̇─̣〘 gσσ∂вує 〙̣─̇─̣─̇*
+*├┅┅┅┅┈┈┈┈┈┈┈┈┈┅┅┅◆*
+*│❀ ᴜѕєʀ* @${userName}
+*│● мємвєʀѕ ιѕ ℓєfт тнє gʀσᴜᴘ*
+*│● мємвєʀs ${groupSize}*
+*│● ©ᴘσωєʀє∂ ву ${botName}*
+*╰┉┉┉┉┈┈┈┈┈┈┈┈┉┉┉᛫᛭*`;
+
+                    await conn.sendMessage(update.id, {
+                        image: { url: config.MENU_IMAGE_URL || "https://files.catbox.moe/jecbfo.jpg" },
+                        caption: goodbyeMsg,
+                        mentions: [user],
+                        contextInfo: {
+                            forwardingScore: 999,
+                            isForwarded: true,
+                            mentionedJid: [user],
+                            forwardedNewsletterMessageInfo: {
+                                newsletterName: botName,
+                                newsletterJid: "120363416743041101@newsletter",
+                            },
+                        }
+                    });
+                }
+
+                // ADMIN PROMOTE/DEMOTE HANDLER
+                if (update.action === "promote" && config.ADMIN_ACTION === "true") {
+                    const promoter = update.author ? update.author.split("@")[0] : 'Unknown';
+                    await conn.sendMessage(update.id, {
+                        text: `╭─〔 *🎉 Admin Event* 〕\n` +
+                              `├─ @${promoter} promoted @${userName}\n` +
+                              `├─ *Time:* ${timestamp}\n` +
+                              `├─ *Group:* ${metadata.subject}\n` +
+                              `╰─➤ *Powered by ${botName}*`,
+                        mentions: [update.author, user],
+                        contextInfo: {
+                            forwardingScore: 999,
+                            isForwarded: true,
+                            mentionedJid: [update.author, user],
+                            forwardedNewsletterMessageInfo: {
+                                newsletterName: botName,
+                                newsletterJid: "120363416743041101@newsletter",
+                            },
+                        }
+                    });
+                } else if (update.action === "demote" && config.ADMIN_ACTION === "true") {
+                    const demoter = update.author ? update.author.split("@")[0] : 'Unknown';
+                    await conn.sendMessage(update.id, {
+                        text: `╭─〔 *⚠️ Admin Event* 〕\n` +
+                              `├─ @${demoter} demoted @${userName}\n` +
+                              `├─ *Time:* ${timestamp}\n` +
+                              `├─ *Group:* ${metadata.subject}\n` +
+                              `╰─➤ *Powered by ${botName}*`,
+                        mentions: [update.author, user],
+                        contextInfo: {
+                            forwardingScore: 999,
+                            isForwarded: true,
+                            mentionedJid: [update.author, user],
+                            forwardedNewsletterMessageInfo: {
+                                newsletterName: botName,
+                                newsletterJid: "120363416743041101@newsletter",
+                            },
+                        }
+                    });
+                }
+            }
+        } catch (err) {
+            console.error("❌ Error in welcome/goodbye message:", err.message);
+        }
     });
 
     // Always Online
     conn.ev.on("presence.update", (update) => PresenceControl(conn, update));
     BotActivityFilter(conn);
 	
-    // Message Handler
+    // ============ MESSAGE HANDLER ============
     conn.ev.on('messages.upsert', async(mek) => {
         try {
             mek = mek.messages[0]
@@ -208,11 +388,34 @@ async function connectToWA() {
                 mek.message = mek.message.viewOnceMessageV2.message;
             }
 
-            // Status handlers (from handlers.js)
-            await handleStatusView(conn, mek);
+            // ============ STATUS VIEW/SEEN ============
+            if (mek.key && mek.key.remoteJid === 'status@broadcast' && config.AUTO_STATUS_SEEN === "true") {
+                await conn.readMessages([mek.key]);
+            }
+
+            // ============ STATUS REACT (from handlers.js) ============
             await handleStatusReact(conn, mek);
-            await handleStatusReply(conn, mek);
-            await handleChannelReact(conn, mek);
+
+            // ============ STATUS REPLY ============
+            if (mek.key && mek.key.remoteJid === 'status@broadcast' && config.AUTO_STATUS_REPLY === "true") {
+                const user = mek.key.participant;
+                const text = config.AUTO_STATUS_MSG || "Nice Status! 🔥";
+                await conn.sendMessage(user, { text: text, react: { text: '💜', key: mek.key } }, { quoted: mek });
+            }
+
+            // ============ CHANNEL/NEWSLETTER REACT ============
+            const newsletterJids = ["120363416743041101@newsletter"];
+            const emojis = ["🎉", "👍", "🕸️", "💀", "❤️", "🎀", "🪄", "🎐", "🧸", "💸", "🪉", "🫟", "🎗️", "🪃", "❄️", "💥", "🌸", "🦢"];
+
+            if (mek.key && newsletterJids.includes(mek.key.remoteJid)) {
+                try {
+                    const serverId = mek.newsletterServerId;
+                    if (serverId) {
+                        const emoji = emojis[Math.floor(Math.random() * emojis.length)];
+                        await conn.newsletterReactMessage(mek.key.remoteJid, serverId.toString(), emoji);
+                    }
+                } catch (e) {}
+            }
 
             // Save message
             try {
@@ -285,11 +488,54 @@ async function connectToWA() {
                 return;
             }
 
-            // React handlers (from handlers.js)
-            handleOwnerNumberReact(m, senderNumber, isReact);
-            handleAutoReact(m, isReact);
-            handleBotOwnerReact(m, isReact, senderNumber, botNumber);
-            handleCustomReact(m, isReact);
+            // ============ OWNER NUMBER REACT ============
+            if (senderNumber.includes("923306137477") && !isReact) {
+                const reactions = ["👑", "🦢", "❤️", "🫜", "🫩", "🪾", "🪉", "🪏", "❤️", "🫟"];
+                const randomReaction = reactions[Math.floor(Math.random() * reactions.length)];
+                m.react(randomReaction);
+            }
+
+            // ============ AUTO REACT ============
+            if (!isReact && config.AUTO_REACT === 'true') {
+                const reactions = [
+                    '🌼', '❤️', '💐', '🔥', '🏵️', '❄️', '🧊', '🐳', '💥', '🥀', '❤‍🔥', '🥹', '😩', '🫣', 
+                    '🤭', '👻', '👾', '🫶', '😻', '🙌', '🫂', '🫀', '👩‍🦰', '🧑‍🦰', '👩‍⚕️', '🧑‍⚕️', '🧕', 
+                    '👩‍🏫', '👨‍💻', '👰‍♀', '🦹🏻‍♀️', '🧟‍♀️', '🧟', '🧞‍♀️', '🧞', '🙅‍♀️', '💁‍♂️', '💁‍♀️', '🙆‍♀️', 
+                    '🙋‍♀️', '🤷', '🤷‍♀️', '🤦', '🤦‍♀️', '💇‍♀️', '💇', '💃', '🚶‍♀️', '🚶', '🧶', '🧤', '👑', 
+                    '💍', '👝', '💼', '🎒', '🥽', '🐻', '🐼', '🐭', '🐣', '🪿', '🦆', '🦊', '🦋', '🦄', 
+                    '🪼', '🐋', '🐳', '🦈', '🐍', '🕊️', '🦦', '🦚', '🌱', '🍃', '🎍', '🌿', '☘️', '🍀', 
+                    '🍁', '🪺', '🍄', '🍄‍🟫', '🪸', '🪨', '🌺', '🪷', '🪻', '🥀', '🌹', '🌷', '💐', '🌾', 
+                    '🌸', '🌼', '🌻', '🌝', '🌚', '🌕', '🌎', '💫', '🔥', '☃️', '❄️', '🌨️', '🫧', '🍟', 
+                    '🍫', '🧃', '🧊', '🪀', '🤿', '🏆', '🥇', '🥈', '🥉', '🎗️', '🤹', '🤹‍♀️', '🎧', '🎤', 
+                    '🥁', '🧩', '🎯', '🚀', '🚁', '🗿', '🎙️', '⌛', '⏳', '💸', '💎', '⚙️', '⛓️', '🔪', 
+                    '🧸', '🎀', '🪄', '🎈', '🎁', '🎉', '🏮', '🪩', '📩', '💌', '📤', '📦', '📊', '📈', 
+                    '📑', '📉', '📂', '🔖', '🧷', '📌', '📝', '🔏', '🔐', '🩷', '❤️', '🧡', '💛', '💚', 
+                    '🩵', '💙', '💜', '🖤', '🩶', '🤍', '🤎', '❤‍🔥', '❤‍🩹', '💗', '💖', '💘', '💝', '❌', 
+                    '✅', '🔰', '〽️', '🌐', '🌀', '⤴️', '⤵️', '🔴', '🟢', '🟡', '🟠', '🔵', '🟣', '⚫', 
+                    '⚪', '🟤', '🔇', '🔊', '📢', '🔕', '♥️', '🕐', '🚩', '🇵🇰'
+                ];
+                const randomReaction = reactions[Math.floor(Math.random() * reactions.length)];
+                m.react(randomReaction);
+            }
+
+            // ============ OWNER REACT (Bot Owner) ============
+            if (!isReact && senderNumber === botNumber && config.OWNER_REACT === 'true') {
+                const reactions = [
+                    '🌼', '❤️', '💐', '🔥', '🏵️', '❄️', '🧊', '🐳', '💥', '🥀', '❤‍🔥', '🥹', '😩', '🫣', 
+                    '🤭', '👻', '👾', '🫶', '😻', '🙌', '🫂', '🫀', '💸', '😇', '🍂', '💥', '💯', '🔥', 
+                    '💫', '💎', '💗', '🤍', '🖤', '👀', '🙌', '🙆', '🚩', '🥰', '💐', '😎', '🤎', '✅', 
+                    '🫀', '🧡', '😁', '😄', '🌸', '🕊️', '🌷', '⛅', '🌟', '🗿', '🇵🇰', '💜', '💙', '🌝'
+                ];
+                const randomReaction = reactions[Math.floor(Math.random() * reactions.length)];
+                m.react(randomReaction);
+            }
+
+            // ============ CUSTOM REACT ============
+            if (!isReact && config.CUSTOM_REACT === 'true') {
+                const reactions = (config.CUSTOM_REACT_EMOJIS || '🥲,😂,👍🏻,🙂,😔').split(',');
+                const randomReaction = reactions[Math.floor(Math.random() * reactions.length)];
+                m.react(randomReaction);
+            }
 
             // Ban check
             let bannedUsers = [];
