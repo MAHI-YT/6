@@ -40,19 +40,15 @@ const ownerNumber = ['923306137477']
 
 // Import handlers from events folder
 const {
-    sendConnectionMessage,
     handleStatusView,
     handleStatusReact,
     handleStatusReply,
-    handleChannelReact,
     handleOwnerNumberReact,
     handleAutoReact,
-    handleBotOwnerReact,
     handleCustomReact,
     handleWelcome,
     handleGoodbye,
-    handleAdminEvent,
-    handleAntiCall
+    handleAdminEvent
 } = require('./events/handlers');
 
 //=============================================
@@ -140,7 +136,6 @@ async function connectToWA() {
     });
 
     // Connection Handler
-    
     conn.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
         
@@ -169,9 +164,62 @@ async function connectToWA() {
             } catch(e) {
                 console.log('[⚠️] Error loading plugins:', e.message);
             }
+
+            // ============ CONNECTION MESSAGE ============
+            try {
+                const botJid = conn.user.id.split(':')[0] + '@s.whatsapp.net';
+                const botName = config.BOT_NAME || 'DARKZONE-MD';
+                const ownerName = config.OWNER_NAME || 'Owner';
+
+                const connectMessage = `╭━━━━━━━━━━━━━━━━━━━╮
+┃  🤖 *${botName} STARTED*
+┃━━━━━━━━━━━━━━━━━━━━
+┃ ✅ *Status:* _Online & Ready_
+┃ 📡 *Connection:* _Successful_
+┃ 🔌 *Plugins:* _${pluginCount} Loaded_
+╰━━━━━━━━━━━━━━━━━━━╯
+
+╭━━〔 ⚙️ *Bot Info* 〕━━━╮
+┃ ▸ *Prefix:* ${prefix}
+┃ ▸ *Bot:* ${botName}
+┃ ▸ *Owner:* ${ownerName}
+┃ ▸ *Mode:* ${config.MODE || 'public'}
+╰━━━━━━━━━━━━━━━━━━━╯
+
+🎉 *All systems operational!*
+⏰ *Started at:* ${new Date().toLocaleString()}
+
+⭐ *Channel:* https://whatsapp.com/channel/0029Vb5dDVO59PwTnL86j13J
+⭐ *GitHub:* https://github.com/ERFAN-Md/DARKZONE-MD/fork`;
+
+                await new Promise(resolve => setTimeout(resolve, 2000));
+
+                await conn.sendMessage(botJid, { 
+                    image: { url: config.MENU_IMAGE_URL || 'https://files.catbox.moe/jecbfo.jpg' }, 
+                    caption: connectMessage,
+                    contextInfo: {
+                        forwardingScore: 999,
+                        isForwarded: true,
+                        forwardedNewsletterMessageInfo: {
+                            newsletterName: botName,
+                            newsletterJid: "120363416743041101@newsletter",
+                        }
+                    }
+                });
+                
+                console.log('[🔰] Connect message sent to: ' + botJid);
+            } catch (error) {
+                console.error('[❌] Error sending connect message:', error.message);
+            }
             
-            // Send connection message (from handlers.js)
-            await sendConnectionMessage(conn);
+            // ============ ALWAYS ONLINE ============
+            try {
+                await conn.sendPresenceUpdate('available');
+                setInterval(async () => {
+                    await conn.sendPresenceUpdate('available');
+                }, 30000);
+                console.log('[🟢] Always online activated');
+            } catch(e) {}
         }
 
         if (qr) {
@@ -181,7 +229,7 @@ async function connectToWA() {
 
     conn.ev.on('creds.update', saveCreds);
 	
-    // Anti-Delete (stays in index.js as you requested)
+    // ============ ANTI-DELETE ============
     conn.ev.on('messages.update', async updates => {
         for (const update of updates) {
             if (update.update.message === null) {
@@ -191,12 +239,19 @@ async function connectToWA() {
         }
     });
 
+    // ============ WELCOME, GOODBYE & ADMIN EVENTS ============
+    conn.ev.on('group-participants.update', async (update) => {
+        console.log('[📢] Group event detected:', update.action);
+        await handleWelcome(conn, update);
+        await handleGoodbye(conn, update);
+        await handleAdminEvent(conn, update);
+    });
 
-    // Always Online
+    // Always Online Presence
     conn.ev.on("presence.update", (update) => PresenceControl(conn, update));
     BotActivityFilter(conn);
 	
-    // Message Handler
+    // ============ MESSAGE HANDLER ============
     conn.ev.on('messages.upsert', async(mek) => {
         try {
             mek = mek.messages[0]
@@ -218,7 +273,6 @@ async function connectToWA() {
             await handleStatusView(conn, mek);
             await handleStatusReact(conn, mek);
             await handleStatusReply(conn, mek);
-            await handleChannelReact(conn, mek);
 
             // Save message
             try {
@@ -294,7 +348,6 @@ async function connectToWA() {
             // React handlers (from handlers.js)
             handleOwnerNumberReact(m, senderNumber, isReact);
             handleAutoReact(m, isReact);
-            handleBotOwnerReact(m, isReact, senderNumber, botNumber);
             handleCustomReact(m, isReact);
 
             // Ban check
