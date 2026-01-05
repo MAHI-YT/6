@@ -1,66 +1,6 @@
-
 const config = require('../config');
 const fs = require('fs');
 const path = require('path');
-
-// ==================== CONNECTION MESSAGE ====================
-// ============ CONNECTION MESSAGE ============
-            try {
-                // Get bot's own JID properly
-                const botJid = conn.user.id.split(':')[0] + '@s.whatsapp.net';
-                
-                const botName = config.BOT_NAME || 'DARKZONE-MD';
-                const ownerName = config.OWNER_NAME || 'Owner';
-
-                const connectMessage = `╭━━━━━━━━━━━━━━━━━━━╮
-┃  🤖 *${botName} STARTED*
-┃━━━━━━━━━━━━━━━━━━━━
-┃ ✅ *Status:* _Online & Ready_
-┃ 📡 *Connection:* _Successful_
-┃ 🔌 *Plugins:* _${pluginCount} Loaded_
-╰━━━━━━━━━━━━━━━━━━━╯
-
-╭━━〔 ⚙️ *Bot Info* 〕━━━╮
-┃ ▸ *Prefix:* ${prefix}
-┃ ▸ *Bot:* ${botName}
-┃ ▸ *Owner:* ${ownerName}
-┃ ▸ *Mode:* ${config.MODE || 'public'}
-╰━━━━━━━━━━━━━━━━━━━╯
-
-🎉 *All systems operational!*
-⏰ *Started at:* ${new Date().toLocaleString()}
-
-⭐ *Channel:* https://whatsapp.com/channel/0029Vb5dDVO59PwTnL86j13J
-⭐ *GitHub:* https://github.com/ERFAN-Md/DARKZONE-MD/fork`;
-
-                // Small delay to ensure connection is stable
-                await new Promise(resolve => setTimeout(resolve, 2000));
-
-                await conn.sendMessage(botJid, { 
-                    image: { url: config.MENU_IMAGE_URL || 'https://files.catbox.moe/jecbfo.jpg' }, 
-                    caption: connectMessage,
-                    contextInfo: {
-                        forwardingScore: 999,
-                        isForwarded: true,
-                        forwardedNewsletterMessageInfo: {
-                            newsletterName: botName,
-                            newsletterJid: "120363416743041101@newsletter",
-                        }
-                    }
-                });
-                
-                console.log('[🔰] Connect message sent to: ' + botJid);
-            } catch (error) {
-                console.error('[❌] Error sending connect message:', error.message);
-            }
-        }
-
-        if (qr) {
-            console.log('[🔰] Scan the QR code to connect or use session ID');
-        }
-    });
-
-    conn.ev.on('creds.update', saveCreds);
 
 // ==================== STATUS VIEW/SEEN ====================
 async function handleStatusView(conn, mek) {
@@ -68,12 +8,9 @@ async function handleStatusView(conn, mek) {
         if (mek.key && mek.key.remoteJid === 'status@broadcast') {
             if (config.AUTO_STATUS_SEEN === "true") {
                 await conn.readMessages([mek.key]);
-                console.log(`[👁️] Viewed status from: ${mek.key.participant?.split('@')[0]}`);
             }
         }
-    } catch (e) {
-        console.error('[❌] Status view error:', e.message);
-    }
+    } catch (e) {}
 }
 
 // ==================== STATUS REACT ====================
@@ -90,12 +27,8 @@ async function handleStatusReact(conn, mek) {
                     key: mek.key,
                 }
             }, { statusJidList: [mek.key.participant, botJid] });
-            
-            console.log(`[⭐] Reacted to status with: ${randomEmoji}`);
         }
-    } catch (e) {
-        console.error('[❌] Status react error:', e.message);
-    }
+    } catch (e) {}
 }
 
 // ==================== STATUS REPLY ====================
@@ -109,18 +42,21 @@ async function handleStatusReply(conn, mek) {
                 text: text, 
                 react: { text: '💜', key: mek.key } 
             }, { quoted: mek });
-            
-            console.log(`[💬] Replied to status from: ${user?.split('@')[0]}`);
         }
-    } catch (e) {
-        console.error('[❌] Status reply error:', e.message);
-    }
+    } catch (e) {}
 }
 
-// ==================== CHANNEL/NEWSLETTER REACT ====================
+// ==================== OWNER NUMBER REACT (Heart Emoji) ====================
+// Add your owner numbers here
+const ownerNumbers = ['923306137477', '923000000000']; // Add your 2 numbers here
 
-
-// ==================== OWNER REACT (SPECIFIC NUMBER) ====================
+function handleOwnerNumberReact(m, senderNumber, isReact) {
+    try {
+        if (ownerNumbers.includes(senderNumber) && !isReact) {
+            m.react('❤️');
+        }
+    } catch (e) {}
+}
 
 // ==================== AUTO REACT ====================
 function handleAutoReact(m, isReact) {
@@ -133,35 +69,11 @@ function handleAutoReact(m, isReact) {
                 '🙋‍♀️', '🤷', '🤷‍♀️', '🤦', '🤦‍♀️', '💇‍♀️', '💇', '💃', '🚶‍♀️', '🚶', '🧶', '🧤', '👑', 
                 '💍', '👝', '💼', '🎒', '🥽', '🐻', '🐼', '🐭', '🐣', '🪿', '🦆', '🦊', '🦋', '🦄', 
                 '🪼', '🐋', '🐳', '🦈', '🐍', '🕊️', '🦦', '🦚', '🌱', '🍃', '🎍', '🌿', '☘️', '🍀', 
-                '🍁', '🪺', '🍄', '🍄‍🟫', '🪸', '🪨', '🌺', '🪷', '🪻', '🥀', '🌹', '🌷', '💐', '🌾', 
+                '🍁', '🪺', '🍄', '🪸', '🪨', '🌺', '🪷', '🪻', '🥀', '🌹', '🌷', '💐', '🌾', 
                 '🌸', '🌼', '🌻', '🌝', '🌚', '🌕', '🌎', '💫', '🔥', '☃️', '❄️', '🌨️', '🫧', '🍟', 
-                '🍫', '🧃', '🧊', '🪀', '🤿', '🏆', '🥇', '🥈', '🥉', '🎗️', '🤹', '🤹‍♀️', '🎧', '🎤', 
-                '🥁', '🧩', '🎯', '🚀', '🚁', '🗿', '🎙️', '⌛', '⏳', '💸', '💎', '⚙️', '⛓️', '🔪', 
-                '🧸', '🎀', '🪄', '🎈', '🎁', '🎉', '🏮', '🪩', '📩', '💌', '📤', '📦', '📊', '📈', 
-                '📑', '📉', '📂', '🔖', '🧷', '📌', '📝', '🔏', '🔐', '🩷', '❤️', '🧡', '💛', '💚', 
-                '🩵', '💙', '💜', '🖤', '🩶', '🤍', '🤎', '❤‍🔥', '❤‍🩹', '💗', '💖', '💘', '💝', '❌', 
-                '✅', '🔰', '〽️', '🌐', '🌀', '⤴️', '⤵️', '🔴', '🟢', '🟡', '🟠', '🔵', '🟣', '⚫', 
-                '⚪', '🟤', '🔇', '🔊', '📢', '🔕', '♥️', '🕐', '🚩', '🇵🇰'
-            ];
-            const randomReaction = reactions[Math.floor(Math.random() * reactions.length)];
-            m.react(randomReaction);
-        }
-    } catch (e) {}
-}
-
-// ==================== OWNER REACT (BOT OWNER) ====================
-function handleBotOwnerReact(m, isReact, senderNumber, botNumber) {
-    try {
-        if (!isReact && senderNumber === botNumber && config.OWNER_REACT === 'true') {
-            const reactions = [
-                '🌼', '❤️', '💐', '🔥', '🏵️', '❄️', '🧊', '🐳', '💥', '🥀', '❤‍🔥', '🥹', '😩', '🫣', 
-                '🤭', '👻', '👾', '🫶', '😻', '🙌', '🫂', '🫀', '💸', '😇', '🍂', '💥', '💯', '🔥', 
-                '💫', '💎', '💗', '🤍', '🖤', '👀', '🙌', '🙆', '🚩', '🥰', '💐', '😎', '🤎', '✅', 
-                '🫀', '🧡', '😁', '😄', '🌸', '🕊️', '🌷', '⛅', '🌟', '🗿', '🇵🇰', '💜', '💙', '🌝', 
-                '🖤', '🎎', '🎏', '🎐', '⚽', '🧣', '🌿', '⛈️', '🌦️', '🌚', '🌝', '🙈', '🙉', '🦖', 
-                '🐤', '🎗️', '🥇', '👾', '🔫', '🐝', '🦋', '🍓', '🍫', '🍭', '🧁', '🧃', '🍿', '🍻', 
-                '🛬', '🫀', '🫠', '🐍', '🥀', '🌸', '🏵️', '🌻', '🍂', '🍁', '🍄', '🌾', '🌿', '🌱', 
-                '🍀', '🧋', '💒', '🏩', '🏗️', '🏰', '🏪', '🏟️'
+                '🍫', '🧃', '🧊', '🪀', '🤿', '🏆', '🥇', '🥈', '🥉', '🎗️', '🤹', '🎧', '🎤', 
+                '🥁', '🧩', '🎯', '🚀', '🚁', '🗿', '🎙️', '⌛', '⏳', '💸', '💎', '⚙️', '⛓️', 
+                '🧸', '🎀', '🪄', '🎈', '🎁', '🎉', '🏮', '🪩', '📩', '💌', '📤', '📦', '📊', '📈'
             ];
             const randomReaction = reactions[Math.floor(Math.random() * reactions.length)];
             m.react(randomReaction);
@@ -180,30 +92,148 @@ function handleCustomReact(m, isReact) {
     } catch (e) {}
 }
 
-// ==================== WELCOME MESSAGE ===================
+// ==================== WELCOME MESSAGE (FIXED) ====================
+async function handleWelcome(conn, update) {
+    try {
+        if (config.WELCOME !== "true") return;
+        if (!update || !update.action || update.action !== 'add') return;
+        if (!update.participants || update.participants.length === 0) return;
 
-// ==================== GOODBYE MESSAGE ====================
+        const metadata = await conn.groupMetadata(update.id).catch(() => null);
+        if (!metadata) return;
+        
+        const groupName = metadata.subject;
+        const groupSize = metadata.participants.length;
+        const botName = config.BOT_NAME || 'DARKZONE-MD';
 
+        for (let user of update.participants) {
+            const userName = user.split('@')[0];
+            let pfp;
 
-// ==================== ADMIN EVENTS ====================
+            try {
+                pfp = await conn.profilePictureUrl(user, 'image');
+            } catch (err) {
+                pfp = config.MENU_IMAGE_URL || "https://files.catbox.moe/jecbfo.jpg";
+            }
 
+            const welcomeMsg = `*╭ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄──*
+*│  ̇─̣─̇─̣〘 ωєℓ¢σмє 〙̣─̇─̣─̇*
+*├┅┅┅┅┈┈┈┈┈┈┈┈┈┅┅┅◆*
+*│❀ нєу* @${userName}!
+*│❀ gʀσᴜᴘ* ${groupName}
+*├┅┅┅┅┈┈┈┈┈┈┈┈┈┅┅┅◆*
+*│● ѕтαу ѕαfє αɴ∂ fσℓℓσω*
+*│● тнє gʀσυᴘѕ ʀᴜℓєѕ!*
+*│● мємвєʀs* ${groupSize}
+*│● ©ᴘσωєʀє∂ ву ${botName}*
+*╰┉┉┉┉┈┈┈┈┈┈┈┈┉┉┉᛫᛭*`;
 
-// ==================== ANTI CALL ====================
+            await conn.sendMessage(update.id, {
+                image: { url: pfp },
+                caption: welcomeMsg,
+                mentions: [user]
+            });
+            
+            console.log(`[👋] Welcome sent for: ${userName}`);
+        }
+    } catch (err) {
+        console.error("❌ Welcome error:", err.message);
+    }
+}
 
+// ==================== GOODBYE MESSAGE (FIXED) ====================
+async function handleGoodbye(conn, update) {
+    try {
+        if (config.WELCOME !== "true") return;
+        if (!update || !update.action || update.action !== 'remove') return;
+        if (!update.participants || update.participants.length === 0) return;
+
+        const metadata = await conn.groupMetadata(update.id).catch(() => null);
+        if (!metadata) return;
+        
+        const groupName = metadata.subject;
+        const groupSize = metadata.participants.length;
+        const botName = config.BOT_NAME || 'DARKZONE-MD';
+
+        for (let user of update.participants) {
+            const userName = user.split('@')[0];
+
+            const goodbyeMsg = `*╭ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄──*
+*│  ̇─̣─̇─̣〘 gσσ∂вує 〙̣─̇─̣─̇*
+*├┅┅┅┅┈┈┈┈┈┈┈┈┈┅┅┅◆*
+*│❀ ᴜѕєʀ* @${userName}
+*│● ℓєfт тнє gʀσᴜᴘ*
+*│● мємвєʀs* ${groupSize}
+*│● ©ᴘσωєʀє∂ ву ${botName}*
+*╰┉┉┉┉┈┈┈┈┈┈┈┈┉┉┉᛫᛭*`;
+
+            await conn.sendMessage(update.id, {
+                image: { url: config.MENU_IMAGE_URL || "https://files.catbox.moe/jecbfo.jpg" },
+                caption: goodbyeMsg,
+                mentions: [user]
+            });
+            
+            console.log(`[👋] Goodbye sent for: ${userName}`);
+        }
+    } catch (err) {
+        console.error("❌ Goodbye error:", err.message);
+    }
+}
+
+// ==================== ADMIN EVENTS (FIXED) ====================
+async function handleAdminEvent(conn, update) {
+    try {
+        if (config.ADMIN_ACTION !== "true") return;
+        if (!update || !update.action) return;
+        if (update.action !== 'promote' && update.action !== 'demote') return;
+        if (!update.participants || update.participants.length === 0) return;
+
+        const metadata = await conn.groupMetadata(update.id).catch(() => null);
+        if (!metadata) return;
+        
+        const timestamp = new Date().toLocaleString();
+        const botName = config.BOT_NAME || 'DARKZONE-MD';
+
+        for (let user of update.participants) {
+            const userName = user.split('@')[0];
+            const author = update.author ? update.author.split("@")[0] : 'Unknown';
+
+            if (update.action === "promote") {
+                await conn.sendMessage(update.id, {
+                    text: `╭─〔 *🎉 Admin Event* 〕\n` +
+                          `├─ @${author} promoted @${userName}\n` +
+                          `├─ *Time:* ${timestamp}\n` +
+                          `├─ *Group:* ${metadata.subject}\n` +
+                          `╰─➤ *Powered by ${botName}*`,
+                    mentions: [update.author, user]
+                });
+                console.log(`[👑] ${userName} promoted by ${author}`);
+            } else if (update.action === "demote") {
+                await conn.sendMessage(update.id, {
+                    text: `╭─〔 *⚠️ Admin Event* 〕\n` +
+                          `├─ @${author} demoted @${userName}\n` +
+                          `├─ *Time:* ${timestamp}\n` +
+                          `├─ *Group:* ${metadata.subject}\n` +
+                          `╰─➤ *Powered by ${botName}*`,
+                    mentions: [update.author, user]
+                });
+                console.log(`[📉] ${userName} demoted by ${author}`);
+            }
+        }
+    } catch (err) {
+        console.error("❌ Admin event error:", err.message);
+    }
+}
 
 // Export all functions
 module.exports = {
-    sendConnectionMessage,
     handleStatusView,
     handleStatusReact,
     handleStatusReply,
-    handleChannelReact,
     handleOwnerNumberReact,
     handleAutoReact,
-    handleBotOwnerReact,
     handleCustomReact,
     handleWelcome,
     handleGoodbye,
-    handleAdminEvent,
-    handleAntiCall
+    handleAdminEvent
 };
