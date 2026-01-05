@@ -140,6 +140,7 @@ async function connectToWA() {
     });
 
     // Connection Handler
+    
     conn.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
         
@@ -152,6 +153,22 @@ async function connectToWA() {
             }
         } else if (connection === 'open') {
             console.log('[🔰] DARKZONE-MD connected to WhatsApp ✅');
+            
+            // Load plugins
+            const pluginPath = path.join(__dirname, 'plugins');
+            let pluginCount = 0;
+            
+            try {
+                fs.readdirSync(pluginPath).forEach((plugin) => {
+                    if (path.extname(plugin).toLowerCase() === ".js") {
+                        require(path.join(pluginPath, plugin));
+                        pluginCount++;
+                    }
+                });
+                console.log(`[🔰] ${pluginCount} Plugins installed successfully ✅`);
+            } catch(e) {
+                console.log('[⚠️] Error loading plugins:', e.message);
+            }
             
             // Send connection message (from handlers.js)
             await sendConnectionMessage(conn);
