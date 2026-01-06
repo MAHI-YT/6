@@ -166,8 +166,6 @@ async function connectToWA() {
             console.log('[🔰] Plugins installed successfully ✅');
 
             
-        
-     	
                             // ============ CONNECTION MESSAGE ============
             try {
                 const botJid = conn.user.id.split(':')[0] + '@s.whatsapp.net';
@@ -189,7 +187,10 @@ async function connectToWA() {
 ┃ ▸ *Owner:* 𝐸𝑅𝐹𝒜𝒩 𝒜𝐻𝑀𝒜𝒟
 ┗━━━━━━━━━━━━━━━━━━┛
 
-⭐ *Channel:* https://whatsapp.com/channel/0029Vb5dDVO59PwTnL86j13J  
+🎉 *All systems operational!*
+⏰ *Started at:* ${new Date().toLocaleString()}
+
+⭐ *Channel:* https://whatsapp.com/channel/0029Vb5dDVO59PwTnL86j13J
 ⭐ *GitHub:* https://github.com/ERFAN-Md/DARKZONE-MD/fork`;
 
                 await new Promise(resolve => setTimeout(resolve, 2000));
@@ -211,6 +212,7 @@ async function connectToWA() {
             } catch (error) {
                 console.error('[❌] Error sending connect message:', error.message);
             }
+	
 // =====================================
 	 
   conn.ev.on('messages.update', async updates => {
@@ -393,7 +395,6 @@ BotActivityFilter(conn);
     }
   }	  
 	  
-  
   if (mek.key && mek.key.remoteJid === 'status@broadcast' && config.AUTO_STATUS_REPLY === "true"){
   const user = mek.key.participant
   const text = `${config.AUTO_STATUS_MSG}`
