@@ -166,13 +166,13 @@ async function connectToWA() {
             console.log('[🔰] Plugins installed successfully ✅');
 
             
-                            // ============ CONNECTION MESSAGE ============
-            try {
-                const botJid = conn.user.id.split(':')[0] + '@s.whatsapp.net';
-                const botName = config.BOT_NAME || 'DARKZONE-MD';
-                const ownerName = config.OWNER_NAME || 'Owner';
-
-                const connectMessage = `┏━━━━━━━━━━━━━━━━━━┓
+                // Send connection message
+     	
+                try {
+                    const username = config.REPO.split('/').slice(3, 4)[0];
+                    const mrfrank = `https://github.com/${username}`;
+                    
+                    const upMessage = `┏━━━━━━━━━━━━━━━━━━┓
 ┃ *💡INTELLIGENT BOT SYSTEM*
 ┃━━━━━━━━━━━━━━━━━━━
 ┃ *🔰 DARKZONE-MD | 6.0.0 |* 
@@ -187,31 +187,25 @@ async function connectToWA() {
 ┃ ▸ *Owner:* 𝐸𝑅𝐹𝒜𝒩 𝒜𝐻𝑀𝒜𝒟
 ┗━━━━━━━━━━━━━━━━━━┛
 
-🎉 *All systems operational!*
-⏰ *Started at:* ${new Date().toLocaleString()}
-
-⭐ *Channel:* https://whatsapp.com/channel/0029Vb5dDVO59PwTnL86j13J
-⭐ *GitHub:* https://github.com/ERFAN-Md/DARKZONE-MD/fork`;
-
-                await new Promise(resolve => setTimeout(resolve, 2000));
-
-                await conn.sendMessage(botJid, { 
-                    image: { url: config.MENU_IMAGE_URL || 'https://files.catbox.moe/jecbfo.jpg' }, 
-                    caption: connectMessage,
-                    contextInfo: {
-                        forwardingScore: 999,
-                        isForwarded: true,
-                        forwardedNewsletterMessageInfo: {
-                            newsletterName: botName,
-                            newsletterJid: "120363416743041101@newsletter",
-                        }
-                    }
-                });
-                
-                console.log('[🔰] Connect message sent to: ' + botJid);
-            } catch (error) {
-                console.error('[❌] Error sending connect message:', error.message);
+⭐ *Channel:* https://whatsapp.com/channel/0029Vb5dDVO59PwTnL86j13J  
+⭐ *GitHub:* https://github.com/ERFAN-Md/DARKZONE-MD/fork `;
+                    
+                    await conn.sendMessage(conn.user.id, { 
+                        image: { url: `https://files.catbox.moe/jecbfo.jpg` }, 
+                        caption: upMessage 
+                    });
+                    
+                } catch (sendError) {
+                    console.error('[🔰] Error sending messages:', sendError);
+                }
             }
+
+        if (qr) {
+            console.log('[🔰] Scan the QR code to connect or use session ID');
+        }
+    });
+
+    conn.ev.on('creds.update', saveCreds);
 	
 // =====================================
 	 
@@ -224,6 +218,29 @@ async function connectToWA() {
     }
   });
 
+// anti-call
+
+conn.ev.on('call', async (calls) => {
+  try {
+    if (config.ANTI_CALL !== 'true') return;
+
+    for (const call of calls) {
+      if (call.status !== 'offer') continue; // Only respond on call offer
+
+      const id = call.id;
+      const from = call.from;
+
+      await conn.rejectCall(id, from);
+      await conn.sendMessage(from, {
+        text: config.REJECT_MSG || '*I AM SORRY SIR MY OWNER NOT ALLOWED CALL*'
+      });
+      console.log(`Call rejected and message sent to ${from}`);
+    }
+  } catch (err) {
+    console.error("Anti-call error:", err);
+  }
+});	
+	
 
 //=========WELCOME & GOODBYE =======
 	
