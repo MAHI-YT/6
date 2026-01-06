@@ -1,120 +1,123 @@
 const config = require('../config');
-const fs = require('fs');
-const path = require('path');
 
 // ==================== STATUS VIEW/SEEN ====================
 async function handleStatusView(conn, mek) {
     try {
-        if (mek.key && mek.key.remoteJid === 'status@broadcast') {
-            if (config.AUTO_STATUS_SEEN === "true") {
-                await conn.readMessages([mek.key]);
-            }
+        if (mek.key && mek.key.remoteJid === 'status@broadcast' && config.AUTO_STATUS_SEEN === "true") {
+            conn.readMessages([mek.key]).catch(() => {});
         }
     } catch (e) {}
 }
 
-// ==================== STATUS REACT ====================
+// ==================== STATUS REACT (SAFE) ====================
 async function handleStatusReact(conn, mek) {
     try {
-        if (mek.key && mek.key.remoteJid === 'status@broadcast' && config.AUTO_STATUS_REACT === "true") {
-            const botJid = conn.user.id.split(':')[0] + '@s.whatsapp.net';
-            const emojis = ['❤️', '💸', '😇', '🍂', '💥', '💯', '🔥', '💫', '💎', '💗', '🤍', '🖤', '👀', '🙌', '🙆', '🚩', '🥰', '💐', '😎', '🤎', '✅', '🫀', '🧡', '😁', '😄', '🌸', '🕊️', '🌷', '⛅', '🌟', '🗿', '🇵🇰', '💜', '💙', '🌝', '💚'];
-            const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
-            
-            await conn.sendMessage(mek.key.remoteJid, {
-                react: {
-                    text: randomEmoji,
-                    key: mek.key,
-                }
-            }, { statusJidList: [mek.key.participant, botJid] });
-        }
+        if (!mek.key || mek.key.remoteJid !== 'status@broadcast') return;
+        if (config.AUTO_STATUS_REACT !== "true") return;
+        
+        const botJid = conn.user.id.split(':')[0] + '@s.whatsapp.net';
+        const emojis = ['❤️', '💸', '😇', '🍂', '💥', '💯', '🔥', '💫', '💎', '💗', '🤍', '🖤', '👀', '🙌', '🚩', '🥰', '💐', '😎', '✅', '🧡', '😁', '🌸', '🕊️', '🌷', '🌟', '💜', '💙', '💚'];
+        const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
+        
+        conn.sendMessage(mek.key.remoteJid, {
+            react: { text: randomEmoji, key: mek.key }
+        }, { statusJidList: [mek.key.participant, botJid] }).catch(() => {});
     } catch (e) {}
 }
 
 // ==================== STATUS REPLY ====================
 async function handleStatusReply(conn, mek) {
     try {
-        if (mek.key && mek.key.remoteJid === 'status@broadcast' && config.AUTO_STATUS_REPLY === "true") {
-            const user = mek.key.participant;
-            const text = config.AUTO_STATUS_MSG || "Nice Status! 🔥";
-            
-            await conn.sendMessage(user, { 
-                text: text, 
-                react: { text: '💜', key: mek.key } 
-            }, { quoted: mek });
-        }
+        if (!mek.key || mek.key.remoteJid !== 'status@broadcast') return;
+        if (config.AUTO_STATUS_REPLY !== "true") return;
+        
+        const user = mek.key.participant;
+        const text = config.AUTO_STATUS_MSG || "Nice Status! 🔥";
+        
+        conn.sendMessage(user, { text: text }, { quoted: mek }).catch(() => {});
     } catch (e) {}
 }
 
-// ==================== OWNER NUMBER REACT (Heart Emoji) ====================
-// Add your owner numbers here
-const ownerNumbers = ['923306137477', '923000000000']; // Add your 2 numbers here
+// ==================== OWNER NUMBER REACT (Heart ❤️) ====================
+// ADD YOUR TWO NUMBERS HERE
+const ownerReactNumbers = ['923306137477', '923000000000'];
 
-function handleOwnerNumberReact(m, senderNumber, isReact) {
+function handleOwnerNumberReact(conn, mek, senderNumber, isReact) {
     try {
-        if (ownerNumbers.includes(senderNumber) && !isReact) {
-            m.react('❤️');
-        }
+        if (isReact) return;
+        if (!ownerReactNumbers.includes(senderNumber)) return;
+        
+        conn.sendMessage(mek.key.remoteJid, {
+            react: { text: '❤️', key: mek.key }
+        }).catch(() => {});
     } catch (e) {}
 }
 
-// ==================== AUTO REACT ====================
-function handleAutoReact(m, isReact) {
+// ==================== BOT OWNER REACT ====================
+function handleBotOwnerReact(conn, mek, senderNumber, botNumber, isReact) {
     try {
-        if (!isReact && config.AUTO_REACT === 'true') {
-            const reactions = [
-                '🌼', '❤️', '💐', '🔥', '🏵️', '❄️', '🧊', '🐳', '💥', '🥀', '❤‍🔥', '🥹', '😩', '🫣', 
-                '🤭', '👻', '👾', '🫶', '😻', '🙌', '🫂', '🫀', '👩‍🦰', '🧑‍🦰', '👩‍⚕️', '🧑‍⚕️', '🧕', 
-                '👩‍🏫', '👨‍💻', '👰‍♀', '🦹🏻‍♀️', '🧟‍♀️', '🧟', '🧞‍♀️', '🧞', '🙅‍♀️', '💁‍♂️', '💁‍♀️', '🙆‍♀️', 
-                '🙋‍♀️', '🤷', '🤷‍♀️', '🤦', '🤦‍♀️', '💇‍♀️', '💇', '💃', '🚶‍♀️', '🚶', '🧶', '🧤', '👑', 
-                '💍', '👝', '💼', '🎒', '🥽', '🐻', '🐼', '🐭', '🐣', '🪿', '🦆', '🦊', '🦋', '🦄', 
-                '🪼', '🐋', '🐳', '🦈', '🐍', '🕊️', '🦦', '🦚', '🌱', '🍃', '🎍', '🌿', '☘️', '🍀', 
-                '🍁', '🪺', '🍄', '🪸', '🪨', '🌺', '🪷', '🪻', '🥀', '🌹', '🌷', '💐', '🌾', 
-                '🌸', '🌼', '🌻', '🌝', '🌚', '🌕', '🌎', '💫', '🔥', '☃️', '❄️', '🌨️', '🫧', '🍟', 
-                '🍫', '🧃', '🧊', '🪀', '🤿', '🏆', '🥇', '🥈', '🥉', '🎗️', '🤹', '🎧', '🎤', 
-                '🥁', '🧩', '🎯', '🚀', '🚁', '🗿', '🎙️', '⌛', '⏳', '💸', '💎', '⚙️', '⛓️', 
-                '🧸', '🎀', '🪄', '🎈', '🎁', '🎉', '🏮', '🪩', '📩', '💌', '📤', '📦', '📊', '📈'
-            ];
-            const randomReaction = reactions[Math.floor(Math.random() * reactions.length)];
-            m.react(randomReaction);
-        }
+        if (isReact) return;
+        if (config.OWNER_REACT !== 'true') return;
+        if (senderNumber !== botNumber) return;
+        
+        const reactions = ['👑', '❤️', '🔥', '💫', '💎', '💗', '🌟', '✨'];
+        const randomReaction = reactions[Math.floor(Math.random() * reactions.length)];
+        
+        conn.sendMessage(mek.key.remoteJid, {
+            react: { text: randomReaction, key: mek.key }
+        }).catch(() => {});
     } catch (e) {}
 }
 
-// ==================== CUSTOM REACT ====================
-function handleCustomReact(m, isReact) {
+// ==================== AUTO REACT (Non-blocking) ====================
+function handleAutoReact(conn, mek, isReact) {
     try {
-        if (!isReact && config.CUSTOM_REACT === 'true') {
-            const reactions = (config.CUSTOM_REACT_EMOJIS || '🥲,😂,👍🏻,🙂,😔').split(',');
-            const randomReaction = reactions[Math.floor(Math.random() * reactions.length)];
-            m.react(randomReaction);
-        }
+        if (isReact) return;
+        if (config.AUTO_REACT !== 'true') return;
+        
+        const reactions = ['🌼', '❤️', '💐', '🔥', '🏵️', '❄️', '💥', '🥀', '❤‍🔥', '👻', '💸', '💎', '🌸', '🦋', '✨', '🎉', '👑', '🌟'];
+        const randomReaction = reactions[Math.floor(Math.random() * reactions.length)];
+        
+        conn.sendMessage(mek.key.remoteJid, {
+            react: { text: randomReaction, key: mek.key }
+        }).catch(() => {});
     } catch (e) {}
 }
 
-// ==================== WELCOME MESSAGE (FIXED) ====================
+// ==================== CUSTOM REACT (Non-blocking) ====================
+function handleCustomReact(conn, mek, isReact) {
+    try {
+        if (isReact) return;
+        if (config.CUSTOM_REACT !== 'true') return;
+        
+        const reactions = (config.CUSTOM_REACT_EMOJIS || '🥲,😂,👍🏻,🙂,😔').split(',');
+        const randomReaction = reactions[Math.floor(Math.random() * reactions.length)];
+        
+        conn.sendMessage(mek.key.remoteJid, {
+            react: { text: randomReaction, key: mek.key }
+        }).catch(() => {});
+    } catch (e) {}
+}
+
+// ==================== WELCOME (FIXED) ====================
 async function handleWelcome(conn, update) {
     try {
         if (config.WELCOME !== "true") return;
-        if (!update || !update.action || update.action !== 'add') return;
-        if (!update.participants || update.participants.length === 0) return;
+        if (!update?.action || update.action !== 'add') return;
+        if (!update?.participants?.length) return;
 
-        const metadata = await conn.groupMetadata(update.id).catch(() => null);
-        if (!metadata) return;
-        
+        const metadata = await conn.groupMetadata(update.id);
         const groupName = metadata.subject;
         const groupSize = metadata.participants.length;
         const botName = config.BOT_NAME || 'DARKZONE-MD';
 
-        for (let user of update.participants) {
+        for (const user of update.participants) {
             const userName = user.split('@')[0];
-            let pfp;
+            let pfp = config.MENU_IMAGE_URL || "https://files.catbox.moe/jecbfo.jpg";
 
             try {
                 pfp = await conn.profilePictureUrl(user, 'image');
-            } catch (err) {
-                pfp = config.MENU_IMAGE_URL || "https://files.catbox.moe/jecbfo.jpg";
-            }
+            } catch {}
 
             const welcomeMsg = `*╭ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄──*
 *│  ̇─̣─̇─̣〘 ωєℓ¢σмє 〙̣─̇─̣─̇*
@@ -133,29 +136,25 @@ async function handleWelcome(conn, update) {
                 caption: welcomeMsg,
                 mentions: [user]
             });
-            
-            console.log(`[👋] Welcome sent for: ${userName}`);
+            console.log(`[👋] Welcome: ${userName}`);
         }
     } catch (err) {
         console.error("❌ Welcome error:", err.message);
     }
 }
 
-// ==================== GOODBYE MESSAGE (FIXED) ====================
+// ==================== GOODBYE (FIXED) ====================
 async function handleGoodbye(conn, update) {
     try {
         if (config.WELCOME !== "true") return;
-        if (!update || !update.action || update.action !== 'remove') return;
-        if (!update.participants || update.participants.length === 0) return;
+        if (!update?.action || update.action !== 'remove') return;
+        if (!update?.participants?.length) return;
 
-        const metadata = await conn.groupMetadata(update.id).catch(() => null);
-        if (!metadata) return;
-        
-        const groupName = metadata.subject;
+        const metadata = await conn.groupMetadata(update.id);
         const groupSize = metadata.participants.length;
         const botName = config.BOT_NAME || 'DARKZONE-MD';
 
-        for (let user of update.participants) {
+        for (const user of update.participants) {
             const userName = user.split('@')[0];
 
             const goodbyeMsg = `*╭ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄──*
@@ -172,8 +171,7 @@ async function handleGoodbye(conn, update) {
                 caption: goodbyeMsg,
                 mentions: [user]
             });
-            
-            console.log(`[👋] Goodbye sent for: ${userName}`);
+            console.log(`[👋] Goodbye: ${userName}`);
         }
     } catch (err) {
         console.error("❌ Goodbye error:", err.message);
@@ -184,53 +182,39 @@ async function handleGoodbye(conn, update) {
 async function handleAdminEvent(conn, update) {
     try {
         if (config.ADMIN_ACTION !== "true") return;
-        if (!update || !update.action) return;
+        if (!update?.action) return;
         if (update.action !== 'promote' && update.action !== 'demote') return;
-        if (!update.participants || update.participants.length === 0) return;
+        if (!update?.participants?.length) return;
 
-        const metadata = await conn.groupMetadata(update.id).catch(() => null);
-        if (!metadata) return;
-        
+        const metadata = await conn.groupMetadata(update.id);
         const timestamp = new Date().toLocaleString();
         const botName = config.BOT_NAME || 'DARKZONE-MD';
 
-        for (let user of update.participants) {
+        for (const user of update.participants) {
             const userName = user.split('@')[0];
-            const author = update.author ? update.author.split("@")[0] : 'Unknown';
+            const author = update.author?.split("@")[0] || 'Unknown';
 
-            if (update.action === "promote") {
-                await conn.sendMessage(update.id, {
-                    text: `╭─〔 *🎉 Admin Event* 〕\n` +
-                          `├─ @${author} promoted @${userName}\n` +
-                          `├─ *Time:* ${timestamp}\n` +
-                          `├─ *Group:* ${metadata.subject}\n` +
-                          `╰─➤ *Powered by ${botName}*`,
-                    mentions: [update.author, user]
-                });
-                console.log(`[👑] ${userName} promoted by ${author}`);
-            } else if (update.action === "demote") {
-                await conn.sendMessage(update.id, {
-                    text: `╭─〔 *⚠️ Admin Event* 〕\n` +
-                          `├─ @${author} demoted @${userName}\n` +
-                          `├─ *Time:* ${timestamp}\n` +
-                          `├─ *Group:* ${metadata.subject}\n` +
-                          `╰─➤ *Powered by ${botName}*`,
-                    mentions: [update.author, user]
-                });
-                console.log(`[📉] ${userName} demoted by ${author}`);
-            }
+            const text = update.action === "promote" 
+                ? `╭─〔 *🎉 Admin Event* 〕\n├─ @${author} promoted @${userName}\n├─ *Time:* ${timestamp}\n├─ *Group:* ${metadata.subject}\n╰─➤ *Powered by ${botName}*`
+                : `╭─〔 *⚠️ Admin Event* 〕\n├─ @${author} demoted @${userName}\n├─ *Time:* ${timestamp}\n├─ *Group:* ${metadata.subject}\n╰─➤ *Powered by ${botName}*`;
+
+            await conn.sendMessage(update.id, {
+                text: text,
+                mentions: [update.author, user]
+            });
+            console.log(`[👑] ${update.action}: ${userName}`);
         }
     } catch (err) {
         console.error("❌ Admin event error:", err.message);
     }
 }
 
-// Export all functions
 module.exports = {
     handleStatusView,
     handleStatusReact,
     handleStatusReply,
     handleOwnerNumberReact,
+    handleBotOwnerReact,
     handleAutoReact,
     handleCustomReact,
     handleWelcome,
