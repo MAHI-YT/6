@@ -222,29 +222,6 @@ async function connectToWA() {
     }
   });
 
-// anti-call
-
-conn.ev.on('call', async (calls) => {
-  try {
-    if (config.ANTI_CALL !== 'true') return;
-
-    for (const call of calls) {
-      if (call.status !== 'offer') continue; // Only respond on call offer
-
-      const id = call.id;
-      const from = call.from;
-
-      await conn.rejectCall(id, from);
-      await conn.sendMessage(from, {
-        text: config.REJECT_MSG || '*I AM SORRY SIR MY OWNER NOT ALLOWED CALL*'
-      });
-      console.log(`Call rejected and message sent to ${from}`);
-    }
-  } catch (err) {
-    console.error("Anti-call error:", err);
-  }
-});	
-	
 
 //=========WELCOME & GOODBYE =======
 	
