@@ -170,7 +170,7 @@ async function connectToWA() {
 ┃━━━━━━━━━━━━━━━━━━━━
 ┃ ✅ *Status:* _Online & Ready_
 ┃ 📡 *Connection:* _Successful_
-┃ 🔌 *Plugins:* _${pluginCount} Loaded_
+┃ 🔌 *THE POWERFUL BOT*
 ╰━━━━━━━━━━━━━━━━━━━╯
 
 ╭━━〔 ⚙️ *Bot Info* 〕━━━╮
