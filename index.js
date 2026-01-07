@@ -227,34 +227,29 @@ async function connectToWA() {
 
 //=========WELCOME & GOODBYE (FIXED with LID Support) =======
 
-// Helper function to check participant with LID support
-function isParticipantMatch(participant, targetId) {
-    if (!participant || !targetId) return false;
+ //=========WELCOME & GOODBYE (FIXED with LID Support) =======
+
+// Helper function to extract phone number from JID (supports LID format)
+function extractPhoneNumber(jid) {
+    if (!jid) return 'Unknown';
     
-    const pId = participant.id ? participant.id.split('@')[0] : '';
-    const pLid = participant.lid ? participant.lid.split('@')[0] : '';
-    const pPhone = participant.phoneNumber ? participant.phoneNumber.split('@')[0] : '';
+    // Handle string JID
+    if (typeof jid === 'string') {
+        // LID format: 123456789:10@lid or 123456789@s.whatsapp.net
+        if (jid.includes(':')) {
+            return jid.split(':')[0]; // Get number before colon
+        }
+        if (jid.includes('@')) {
+            return jid.split('@')[0]; // Get number before @
+        }
+        return jid;
+    }
     
-    const targetNumber = targetId.includes(':') 
-        ? targetId.split(':')[0] 
-        : (targetId.includes('@') ? targetId.split('@')[0] : targetId);
-    
-    const pLidNumeric = pLid.includes(':') ? pLid.split(':')[0] : pLid;
-    const targetNumeric = targetNumber.includes(':') ? targetNumber.split(':')[0] : targetNumber;
-    
-    return (
-        pId === targetNumber ||
-        pLid === targetNumber ||
-        pPhone === targetNumber ||
-        pLidNumeric === targetNumeric ||
-        participant.id === targetId ||
-        participant.lid === targetId
-    );
+    return 'Unknown';
 }
 
 conn.ev.on('group-participants.update', async (update) => {
     try {
-        if (config.WELCOME !== "true") return;
         if (!update || !update.id || !update.participants || update.participants.length === 0) return;
 
         const metadata = await conn.groupMetadata(update.id).catch(() => null);
@@ -265,8 +260,10 @@ conn.ev.on('group-participants.update', async (update) => {
         const timestamp = new Date().toLocaleString();
         const botName = config.BOT_NAME || 'DARKZONE-MD';
 
+        console.log(`[📊] Group Update - Action: ${update.action}, Participants: ${update.participants.length}`);
+
         for (let user of update.participants) {
-            const userName = user.split('@')[0];
+            const userNumber = extractPhoneNumber(user);
             let pfp;
 
             try {
@@ -275,17 +272,17 @@ conn.ev.on('group-participants.update', async (update) => {
                 pfp = config.MENU_IMAGE_URL || "https://files.catbox.moe/jecbfo.jpg";
             }
 
-            // WELCOME HANDLER
-            if (update.action === 'add') {
+            // ✅ WELCOME HANDLER
+            if (update.action === 'add' && config.WELCOME === "true") {
                 const welcomeMsg = `*╭ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄──*
 *│  ̇─̣─̇─̣〘 ωєℓ¢σмє 〙̣─̇─̣─̇*
 *├┅┅┅┅┈┈┈┈┈┈┈┈┈┅┅┅◆*
-*│❀ нєу* @${userName}!
-*│❀ gʀσᴜᴘ* ${groupName}
+*│❀ нєу* @${userNumber}!
+*│❀ gʀσᴜᴘ:* ${groupName}
 *├┅┅┅┅┈┈┈┈┈┈┈┈┈┅┅┅◆*
 *│● ѕтαу ѕαfє αɴ∂ fσℓℓσω*
 *│● тнє gʀσυᴘѕ ʀᴜℓєѕ!*
-*│● мємвєʀs* ${groupSize}
+*│● мємвєʀs:* ${groupSize}
 *│● ©ᴘσωєʀє∂ ву ${botName}*
 *╰┉┉┉┉┈┈┈┈┈┈┈┈┉┉┉᛫᛭*`;
 
@@ -294,47 +291,52 @@ conn.ev.on('group-participants.update', async (update) => {
                     caption: welcomeMsg,
                     mentions: [user]
                 });
-                console.log(`[👋] Welcome sent for: ${userName}`);
+                console.log(`[✅ WELCOME] Sent for: ${userNumber} (Full JID: ${user})`);
             }
 
-            // GOODBYE HANDLER
-            if (update.action === 'remove') {
+            // ✅ GOODBYE HANDLER
+            if (update.action === 'remove' && config.WELCOME === "true") {
                 const goodbyeMsg = `*╭ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄──*
 *│  ̇─̣─̇─̣〘 gσσ∂вує 〙̣─̇─̣─̇*
 *├┅┅┅┅┈┈┈┈┈┈┈┈┈┅┅┅◆*
-*│❀ ᴜѕєʀ* @${userName}
+*│❀ ᴜѕєʀ:* @${userNumber}
 *│● ℓєfт тнє gʀσᴜᴘ*
-*│● мємвєʀs* ${groupSize}
+*│● мємвєʀs:* ${groupSize}
 *│● ©ᴘσωєʀє∂ ву ${botName}*
 *╰┉┉┉┉┈┈┈┈┈┈┈┈┉┉┉᛫᛭*`;
 
                 await conn.sendMessage(update.id, {
-                    image: { url: config.MENU_IMAGE_URL || "https://files.catbox.moe/jecbfo.jpg" },
+                    image: { url: pfp },
                     caption: goodbyeMsg,
                     mentions: [user]
                 });
-                console.log(`[👋] Goodbye sent for: ${userName}`);
+                console.log(`[✅ GOODBYE] Sent for: ${userNumber} (Full JID: ${user})`);
             }
 
-            // ADMIN PROMOTE/DEMOTE HANDLER
+            // ✅ ADMIN PROMOTE/DEMOTE HANDLER
             if ((update.action === "promote" || update.action === "demote") && config.ADMIN_ACTION === "true") {
-                const author = update.author ? update.author.split("@")[0] : 'Unknown';
-                const actionText = update.action === "promote" ? "🎉 promoted" : "⚠️ demoted";
+                const authorJid = update.author || '';
+                const authorNumber = extractPhoneNumber(authorJid);
+                const actionText = update.action === "promote" ? "promoted to admin" : "demoted from admin";
                 const emoji = update.action === "promote" ? "🎉" : "⚠️";
                 
+                const adminMsg = `╭─〔 *${emoji} Admin Event* 〕
+├─ *Action by:* @${authorNumber}
+├─ *User:* @${userNumber}
+├─ *Status:* ${actionText}
+├─ *Time:* ${timestamp}
+├─ *Group:* ${groupName}
+╰─➤ *Powered by ${botName}*`;
+
                 await conn.sendMessage(update.id, {
-                    text: `╭─〔 *${emoji} Admin Event* 〕\n` +
-                          `├─ @${author} ${actionText} @${userName}\n` +
-                          `├─ *Time:* ${timestamp}\n` +
-                          `├─ *Group:* ${metadata.subject}\n` +
-                          `╰─➤ *Powered by ${botName}*`,
-                    mentions: [update.author, user]
+                    text: adminMsg,
+                    mentions: [authorJid, user]
                 });
-                console.log(`[👑] ${update.action}: ${userName} by ${author}`);
+                console.log(`[✅ ADMIN] ${update.action}: User ${userNumber} by ${authorNumber}`);
             }
         }
     } catch (err) {
-        console.error("❌ Error in welcome/goodbye message:", err);
+        console.error("❌ Error in group-participants.update:", err);
     }
 });
 
