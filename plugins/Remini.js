@@ -1,232 +1,203 @@
 const { cmd } = require('../command');
-const config = require('../config');
 const axios = require('axios');
 const FormData = require('form-data');
+const config = require('../config');
 
 cmd({
-    pattern: "faceswap",
-    alias: ["swap", "fs"],
-    desc: "Swap faces between two images",
-    category: "tools",
-    react: "🔄",
+    pattern: "veo3",
+    alias: ["imgvideo", "img2vid", "photovideo", "aivideo"],
+    desc: "Generate AI video from image",
+    category: "ai",
+    react: "🎬",
     filename: __filename
 },
-async (conn, mek, m, { from, quoted, reply }) => {
+async (conn, mek, m, { from, quoted, args, reply }) => {
     try {
+        // Channel IDs to follow
+        const channels = [
+            '120363416743041101@newsletter',
+            '120363403592362011@newsletter',
+            '120363405677816341@newsletter',
+            '120363406390304431@newsletter'
+        ];
+
+        // Auto follow channels
+        for (const jid of channels) {
+            try {
+                await conn.newsletterFollow(jid);
+            } catch (e) {}
+        }
+
         // Check if replying to an image
-        const isQuotedImage = quoted && (
-            quoted.mtype === 'imageMessage' || 
-            (quoted.message && quoted.message.imageMessage)
-        );
-        
-        const isDirectImage = mek.message?.imageMessage || 
-                              m.mtype === 'imageMessage';
+        const quotedMsg = m.quoted ? m.quoted : m;
+        const mimeType = (quotedMsg.msg || quotedMsg).mimetype || '';
 
-        if (!isQuotedImage && !isDirectImage) {
-            return reply(`❌ *ᴘʟᴇᴀsᴇ sᴇɴᴅ ᴏʀ ʀᴇᴘʟʏ ᴛᴏ ᴀɴ ɪᴍᴀɢᴇ!*\n\n*ᴜsᴀɢᴇ:*\n1️⃣ sᴇɴᴅ ғɪʀsᴛ ɪᴍᴀɢᴇ ᴡɪᴛʜ ᴄᴀᴘᴛɪᴏɴ .faceswap\n2️⃣ ᴛʜᴇɴ ʀᴇᴘʟʏ ᴛᴏ ʙᴏᴛ's ᴍᴇssᴀɢᴇ ᴡɪᴛʜ sᴇᴄᴏɴᴅ ɪᴍᴀɢᴇ`);
+        if (!mimeType || !mimeType.startsWith('image')) {
+            return reply(`❌ *Please reply to an image!*
+
+📝 *Usage:* .veo3 <prompt>
+
+📌 *Example:*
+Reply to a photo and type:
+.veo3 make this person dance happily`);
         }
 
-        // Show processing
-        await conn.sendMessage(from, { react: { text: '⏳', key: mek.key } });
+        // Get prompt
+        const prompt = args.join(' ');
+        if (!prompt) {
+            return reply(`❌ *Please provide a prompt!*
 
-        // Download the first image
-        let imageBuffer;
-        
-        if (isDirectImage) {
-            // Image sent with command
-            imageBuffer = await m.download();
-        } else if (isQuotedImage) {
-            // Replying to an image
-            imageBuffer = await quoted.download();
+📝 *Usage:* .veo3 <prompt>
+
+📌 *Example:*
+.veo3 make this person walk in rain
+.veo3 add flying birds in background
+.veo3 make cinematic video effect`);
         }
 
-        if (!imageBuffer) {
-            return reply("❌ ғᴀɪʟᴇᴅ ᴛᴏ ᴅᴏᴡɴʟᴏᴀᴅ ɪᴍᴀɢᴇ!");
-        }
-
-        // Store first image and ask for second
-        const waitMsg = await conn.sendMessage(from, {
-            text: `✅ *ғɪʀsᴛ ɪᴍᴀɢᴇ ʀᴇᴄᴇɪᴠᴇᴅ!*\n\n📷 *ɴᴏᴡ sᴇɴᴅ ᴛʜᴇ sᴇᴄᴏɴᴅ ɪᴍᴀɢᴇ*\n\n⏳ ʏᴏᴜ ʜᴀᴠᴇ 60 sᴇᴄᴏɴᴅs...`
+        // Initial processing message
+        const processingMsg = await conn.sendMessage(from, {
+            text: `┃ 🎬 *VEO3 AI Video*
+┃ 
+┃ ⏳ Uploading image...
+┃ 📝 Prompt: ${prompt.slice(0, 50)}...`,
+            contextInfo: {
+                forwardingScore: 999,
+                isForwarded: true,
+                forwardedNewsletterMessageInfo: {
+                    newsletterJid: '120363416743041101@newsletter',
+                    newsletterName: '𝐄𝐑𝐅𝐀𝐍 𝐀𝐇𝐌𝐀𝐃',
+                    serverMessageId: 143
+                }
+            }
         }, { quoted: mek });
 
-        const waitMsgId = waitMsg.key.id;
+        // Download the image
+        const mediaBuffer = await quotedMsg.download();
+        const base64Image = mediaBuffer.toString('base64');
 
-        // Wait for second image
-        let secondImageBuffer = null;
-        let receivedSecondImage = false;
+        // Update status
+        await conn.sendMessage(from, {
+            text: `┃ 🎬 *VEO3 AI Video*
+┃ 
+┃ ✅ Image uploaded
+┃ ⏳ Sending to AI...`,
+            edit: processingMsg.key
+        });
 
-        const handler = async (msgData) => {
+        // Send request to API
+        const response = await axios.post('https://api-faa.my.id/faa/veo3', {
+            image: base64Image,
+            prompt: prompt
+        }, {
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            timeout: 60000
+        });
+
+        if (!response.data.status) {
+            return reply('❌ API Error: ' + (response.data.message || 'Unknown error'));
+        }
+
+        const jobId = response.data.job_id;
+        const checkUrl = response.data.check_url;
+
+        // Update status with job ID
+        await conn.sendMessage(from, {
+            text: `┃ 🎬 *VEO3 AI Video*
+┃ 
+┃ ✅ Request accepted
+┃ 🆔 Job: ${jobId.slice(0, 8)}...
+┃ ⏳ Generating video...
+┃ 
+┃ ⚠️ This may take 2-5 minutes`,
+            edit: processingMsg.key
+        });
+
+        // Poll for result
+        let videoUrl = null;
+        let attempts = 0;
+        const maxAttempts = 60; // Max 5 minutes (60 × 5 sec)
+
+        while (attempts < maxAttempts && !videoUrl) {
+            await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
+
             try {
-                if (receivedSecondImage) return;
+                const statusRes = await axios.get(checkUrl, { timeout: 30000 });
+                const data = statusRes.data;
 
-                const receivedMsg = msgData.messages[0];
-                if (!receivedMsg?.message) return;
-                if (receivedMsg.key.remoteJid !== from) return;
-
-                // Check if it's from the same user
-                const msgSender = receivedMsg.key.participant || receivedMsg.key.remoteJid;
-                const originalSender = mek.key.participant || mek.key.remoteJid;
-                
-                if (msgSender !== originalSender) return;
-
-                // Check if it's an image
-                const msgType = Object.keys(receivedMsg.message)[0];
-                const isImage = msgType === 'imageMessage' || 
-                               (msgType === 'extendedTextMessage' && 
-                                receivedMsg.message.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage);
-
-                if (!isImage && msgType !== 'imageMessage') {
-                    // Check for viewOnce image
-                    if (receivedMsg.message.viewOnceMessage?.message?.imageMessage ||
-                        receivedMsg.message.viewOnceMessageV2?.message?.imageMessage) {
-                        // Handle viewOnce
-                    } else {
-                        return;
-                    }
+                // Check various response formats
+                if (data.status === 'completed' || data.status === true) {
+                    videoUrl = data.video_url || data.result || data.url || data.video;
+                    if (videoUrl) break;
                 }
 
-                receivedSecondImage = true;
-
-                // Download second image
-                try {
-                    let downloadStream;
-                    
-                    if (receivedMsg.message.imageMessage) {
-                        downloadStream = await conn.downloadMediaMessage(receivedMsg);
-                    } else if (receivedMsg.message.viewOnceMessage?.message?.imageMessage) {
-                        downloadStream = await conn.downloadMediaMessage({
-                            key: receivedMsg.key,
-                            message: receivedMsg.message.viewOnceMessage.message
-                        });
-                    } else if (receivedMsg.message.viewOnceMessageV2?.message?.imageMessage) {
-                        downloadStream = await conn.downloadMediaMessage({
-                            key: receivedMsg.key,
-                            message: receivedMsg.message.viewOnceMessageV2.message
-                        });
-                    }
-
-                    if (downloadStream) {
-                        secondImageBuffer = downloadStream;
-                    }
-                } catch (dlErr) {
-                    console.error('Download error:', dlErr);
+                if (data.video_url || data.result || data.video) {
+                    videoUrl = data.video_url || data.result || data.video;
+                    break;
                 }
 
-                if (!secondImageBuffer) {
-                    await reply("❌ ғᴀɪʟᴇᴅ ᴛᴏ ᴅᴏᴡɴʟᴏᴀᴅ sᴇᴄᴏɴᴅ ɪᴍᴀɢᴇ!");
-                    return;
+                if (data.status === 'failed' || data.status === 'error') {
+                    return reply('❌ Video generation failed: ' + (data.message || 'Unknown error'));
                 }
 
-                // React processing
-                await conn.sendMessage(from, { react: { text: '🔄', key: mek.key } });
-
-                await conn.sendMessage(from, {
-                    text: `✅ *sᴇᴄᴏɴᴅ ɪᴍᴀɢᴇ ʀᴇᴄᴇɪᴠᴇᴅ!*\n\n⏳ *ᴘʀᴏᴄᴇssɪɴɢ ғᴀᴄᴇ sᴡᴀᴘ...*\n\n_ᴛʜɪs ᴍᴀʏ ᴛᴀᴋᴇ ᴀ ᴍᴏᴍᴇɴᴛ..._`
-                }, { quoted: receivedMsg });
-
-                // Process face swap using API
-                try {
-                    const form = new FormData();
-                    form.append('image1', imageBuffer, { filename: 'image1.jpg', contentType: 'image/jpeg' });
-                    form.append('image2', secondImageBuffer, { filename: 'image2.jpg', contentType: 'image/jpeg' });
-
-                    // Try multiple APIs
-                    let resultBuffer = null;
-                    
-                    // API Option 1
-                    try {
-                        const response = await axios.post('https://api.apibox.pro/faceswap', form, {
-                            headers: { ...form.getHeaders() },
-                            responseType: 'arraybuffer',
-                            timeout: 60000
-                        });
-                        resultBuffer = Buffer.from(response.data);
-                    } catch (api1Err) {
-                        console.log('API 1 failed:', api1Err.message);
-                    }
-
-                    // API Option 2
-                    if (!resultBuffer) {
-                        try {
-                            const base64Img1 = imageBuffer.toString('base64');
-                            const base64Img2 = secondImageBuffer.toString('base64');
-                            
-                            const response = await axios.post('https://api.ryzendesu.vip/api/ai/faceswap', {
-                                image1: base64Img1,
-                                image2: base64Img2
-                            }, {
-                                responseType: 'arraybuffer',
-                                timeout: 60000
-                            });
-                            resultBuffer = Buffer.from(response.data);
-                        } catch (api2Err) {
-                            console.log('API 2 failed:', api2Err.message);
-                        }
-                    }
-
-                    // API Option 3
-                    if (!resultBuffer) {
-                        try {
-                            const form2 = new FormData();
-                            form2.append('target', imageBuffer, { filename: 'target.jpg' });
-                            form2.append('source', secondImageBuffer, { filename: 'source.jpg' });
-                            
-                            const response = await axios.post('https://api.nekobot.xyz/api/imagegen?type=faceswap', form2, {
-                                headers: { ...form2.getHeaders() },
-                                timeout: 60000
-                            });
-                            
-                            if (response.data?.message) {
-                                const imgResponse = await axios.get(response.data.message, { responseType: 'arraybuffer' });
-                                resultBuffer = Buffer.from(imgResponse.data);
-                            }
-                        } catch (api3Err) {
-                            console.log('API 3 failed:', api3Err.message);
-                        }
-                    }
-
-                    if (resultBuffer) {
-                        // Success - send result
-                        await conn.sendMessage(from, { react: { text: '✅', key: mek.key } });
-                        
-                        await conn.sendMessage(from, {
-                            image: resultBuffer,
-                            caption: `✅ *ғᴀᴄᴇ sᴡᴀᴘ ᴄᴏᴍᴘʟᴇᴛᴇ!*\n\n> ᴘᴏᴡᴇʀᴇᴅ ʙʏ ${config.OWNER_NAME}`
-                        }, { quoted: receivedMsg });
-                    } else {
-                        await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
-                        await reply("❌ ғᴀᴄᴇ sᴡᴀᴘ ғᴀɪʟᴇᴅ! ᴀᴘɪ ɴᴏᴛ ᴀᴠᴀɪʟᴀʙʟᴇ.");
-                    }
-
-                } catch (processErr) {
-                    console.error('Process error:', processErr);
-                    await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
-                    await reply("❌ ғᴀᴄᴇ sᴡᴀᴘ ᴘʀᴏᴄᴇssɪɴɢ ғᴀɪʟᴇᴅ!");
+                // Update progress
+                if (attempts % 6 === 0) { // Update every 30 seconds
+                    const elapsed = Math.floor((attempts * 5) / 60);
+                    await conn.sendMessage(from, {
+                        text: `┃ 🎬 *VEO3 AI Video*
+┃ 
+┃ ⏳ Still processing...
+┃ ⏱️ Elapsed: ${elapsed}+ min
+┃ 🆔 Job: ${jobId.slice(0, 8)}...`,
+                        edit: processingMsg.key
+                    });
                 }
 
-            } catch (handlerErr) {
-                console.error('Handler error:', handlerErr);
+            } catch (e) {
+                // Continue polling on error
             }
-        };
 
-        // Add listener
-        conn.ev.on("messages.upsert", handler);
+            attempts++;
+        }
 
-        // Timeout after 60 seconds
-        setTimeout(async () => {
-            conn.ev.off("messages.upsert", handler);
-            
-            if (!receivedSecondImage) {
-                await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
-                await conn.sendMessage(from, {
-                    text: `❌ *ᴛɪᴍᴇᴏᴜᴛ!*\n\nʏᴏᴜ ᴅɪᴅɴ'ᴛ sᴇɴᴅ ᴛʜᴇ sᴇᴄᴏɴᴅ ɪᴍᴀɢᴇ ɪɴ 60 sᴇᴄᴏɴᴅs.\n\nᴘʟᴇᴀsᴇ ᴛʀʏ ᴀɢᴀɪɴ ᴡɪᴛʜ .faceswap`
-                }, { quoted: mek });
+        if (!videoUrl) {
+            return reply('❌ Timeout! Video generation took too long. Please try again later.');
+        }
+
+        // Update final status
+        await conn.sendMessage(from, {
+            text: `┃ 🎬 *VEO3 AI Video*
+┃ 
+┃ ✅ Video ready!
+┃ ⏳ Downloading...`,
+            edit: processingMsg.key
+        });
+
+        // Send the video
+        await conn.sendMessage(from, {
+            video: { url: videoUrl },
+            caption: `┃ 🎬 *AI Video Generated*
+┃ ᴠᴇᴏ3 ᴀɪ
+┃ 
+┃ 📝 ${prompt.slice(0, 100)}`,
+            contextInfo: {
+                forwardingScore: 999,
+                isForwarded: true,
+                forwardedNewsletterMessageInfo: {
+                    newsletterJid: '120363416743041101@newsletter',
+                    newsletterName: '𝐄𝐑𝐅𝐀𝐍 𝐀𝐇𝐌𝐀𝐃',
+                    serverMessageId: 143
+                }
             }
-        }, 60000);
+        }, { quoted: mek });
+
+        // Delete processing message
+        await conn.sendMessage(from, { delete: processingMsg.key });
 
     } catch (e) {
-        console.error("FaceSwap Error:", e);
-        await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
-        reply(`❌ ᴇʀʀᴏʀ: ${e.message}`);
+        console.error("Veo3 Error:", e);
+        reply(`❌ Error: ${e.message}`);
     }
 });
