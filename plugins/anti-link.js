@@ -42,17 +42,59 @@ function saveAntiLinkSettings(settings) {
     }
 }
 
-// Get group settings
+// Get group settings with config.ANTI_LINK support
 function getGroupSettings(groupId) {
     const settings = loadAntiLinkSettings();
-    return settings[groupId] || { enabled: false, mode: 1 };
+    const groupData = settings[groupId];
+    
+    // Check if config.ANTI_LINK is enabled (for global Mode 1)
+    const configAntiLink = config.ANTI_LINK === 'true' || config.ANTI_LINK === true;
+    
+    // If group has custom settings, use them
+    if (groupData && groupData.customSet === true) {
+        return {
+            enabled: groupData.enabled,
+            mode: groupData.mode,
+            isGlobal: false
+        };
+    }
+    
+    // If no custom settings, use config.ANTI_LINK for Mode 1 (global)
+    if (configAntiLink) {
+        return {
+            enabled: true,
+            mode: 1,
+            isGlobal: true
+        };
+    }
+    
+    // Default: disabled
+    return {
+        enabled: false,
+        mode: 1,
+        isGlobal: false
+    };
 }
 
-// Set group settings
-function setGroupSettings(groupId, enabled, mode) {
+// Set group settings (custom override)
+function setGroupSettings(groupId, enabled, mode, customSet = true) {
     const settings = loadAntiLinkSettings();
-    settings[groupId] = { enabled, mode };
+    settings[groupId] = { 
+        enabled, 
+        mode, 
+        customSet  // This flag indicates group has custom settings
+    };
     return saveAntiLinkSettings(settings);
+}
+
+// Reset group to global settings (follow config.ANTI_LINK)
+function resetGroupToGlobal(groupId) {
+    const settings = loadAntiLinkSettings();
+    if (settings[groupId]) {
+        delete settings[groupId];
+        return saveAntiLinkSettings(settings);
+    }
+    return true;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -192,6 +234,9 @@ async (conn, mek, m, { from, args, q, isGroup, sender, reply }) => {
         // Get current settings
         const currentSettings = getGroupSettings(from);
         const option = q ? q.toLowerCase().trim() : '';
+        
+        // Check config status
+        const configAntiLink = config.ANTI_LINK === 'true' || config.ANTI_LINK === true;
 
         // ═══════════════════════════════════════════════════════════
         // 📊 SHOW MENU (No arguments)
@@ -199,6 +244,8 @@ async (conn, mek, m, { from, args, q, isGroup, sender, reply }) => {
         if (!option) {
             const statusEmoji = currentSettings.enabled ? "🟢" : "🔴";
             const statusText = currentSettings.enabled ? "ON" : "OFF";
+            const globalEmoji = currentSettings.isGlobal ? "🌍" : "⚙️";
+            const globalText = currentSettings.isGlobal ? "(Global/Config)" : "(Custom)";
             
             let modeText = "";
             switch(currentSettings.mode) {
@@ -222,22 +269,28 @@ async (conn, mek, m, { from, args, q, isGroup, sender, reply }) => {
 ║                           
 ║  ${statusEmoji} *Status:* ${statusText}
 ║  📋 *Current:* ${modeText}
+║  ${globalEmoji} *Source:* ${globalText}
+║                           
+║  🌐 *Config ANTI_LINK:* ${configAntiLink ? "✅ TRUE" : "❌ FALSE"}
 ║                           
 ╠═══════════════════════════╣
 ║     📚 *AVAILABLE MODES*      ║
 ╠═══════════════════════════╣
 ║                           
-║  *Mode 1️⃣ - Delete Only*
+║  *Mode 1️⃣ - Delete Only* 🌍
+║  ➤ Linked with Config
 ║  ➤ Deletes all links
 ║  ➤ No one gets kicked
-║  ➤ Just warning message
+║  ➤ Auto ON when ANTI_LINK=true
 ║                           
-║  *Mode 2️⃣ - Smart Mode*
+║  *Mode 2️⃣ - Smart Mode* ⚙️
+║  ➤ Custom per group
 ║  ➤ Deletes all links
 ║  ➤ Kicks only for WA links
 ║  ➤ (Groups/Channels)
 ║                           
-║  *Mode 3️⃣ - Strict Mode*
+║  *Mode 3️⃣ - Strict Mode* ⚙️
+║  ➤ Custom per group
 ║  ➤ Deletes all links
 ║  ➤ Kicks for ANY link
 ║  ➤ Maximum security
@@ -247,13 +300,10 @@ async (conn, mek, m, { from, args, q, isGroup, sender, reply }) => {
 ╠═══════════════════════════╣
 ║                           
 ║  *.antilink on*
-║  ➤ Turn ON Anti-Link
+║  ➤ Turn ON (Mode 1)
 ║                           
 ║  *.antilink off*
 ║  ➤ Turn OFF Anti-Link
-║                           
-║  *.antilink mode1*
-║  ➤ Set to Delete Only
 ║                           
 ║  *.antilink mode2*
 ║  ➤ Set to Smart Mode
@@ -261,9 +311,14 @@ async (conn, mek, m, { from, args, q, isGroup, sender, reply }) => {
 ║  *.antilink mode3*
 ║  ➤ Set to Strict Mode
 ║                           
+║  *.antilink reset*
+║  ➤ Reset to Global/Config
+║                           
 ╠═══════════════════════════╣
-║  ⚠️ *Note:* Admins & Owner  
-║  are excluded from actions  
+║  💡 *Tip:* Set ANTI_LINK=true
+║  in Heroku for auto Mode 1
+║                           
+║  ⚠️ Admins & Owner excluded
 ╚═══════════════════════════╝
 `.trim();
 
@@ -273,31 +328,23 @@ async (conn, mek, m, { from, args, q, isGroup, sender, reply }) => {
         }
 
         // ═══════════════════════════════════════════════════════════
-        // 🟢 TURN ON
+        // 🟢 TURN ON (Mode 1 - Delete Only)
         // ═══════════════════════════════════════════════════════════
-        if (option === 'on' || option === 'enable') {
+        if (option === 'on' || option === 'enable' || option === 'mode1' || option === '1') {
             if (!isBotAdmin) {
                 return await conn.sendMessage(from, { 
                     text: "❌ I need to be an admin to use Anti-Link!" 
                 }, { quoted: mek });
             }
 
-            const mode = currentSettings.mode || 1;
-            setGroupSettings(from, true, mode);
-
-            let modeDesc = "";
-            switch(mode) {
-                case 1: modeDesc = "Delete Only"; break;
-                case 2: modeDesc = "Smart Mode (Kick for WA links)"; break;
-                case 3: modeDesc = "Strict Mode (Kick for all links)"; break;
-            }
+            setGroupSettings(from, true, 1, true);
 
             await conn.sendMessage(from, { 
                 react: { text: "✅", key: mek.key } 
             });
 
             return await conn.sendMessage(from, { 
-                text: `✅ *Anti-Link Enabled!*\n\n📋 *Current Mode:* ${modeDesc}\n\n⚠️ Anyone who sends links will face action!\n\n💡 Use *.antilink* to see all modes.`
+                text: `✅ *Anti-Link Enabled!*\n\n📋 *Mode:* 1️⃣ Delete Only\n\n📝 *Features:*\n• All links will be deleted\n• No one will be kicked\n• Warning message sent\n\n⚠️ Anyone who sends links will have their message deleted!`
             }, { quoted: mek });
         }
 
@@ -305,29 +352,32 @@ async (conn, mek, m, { from, args, q, isGroup, sender, reply }) => {
         // 🔴 TURN OFF
         // ═══════════════════════════════════════════════════════════
         if (option === 'off' || option === 'disable') {
-            setGroupSettings(from, false, currentSettings.mode || 1);
+            setGroupSettings(from, false, 1, true);
 
             await conn.sendMessage(from, { 
                 react: { text: "✅", key: mek.key } 
             });
 
             return await conn.sendMessage(from, { 
-                text: `🔴 *Anti-Link Disabled!*\n\n✅ Members can now share links freely.`
+                text: `🔴 *Anti-Link Disabled!*\n\n✅ Members can now share links freely.\n\n💡 *Note:* This overrides global config setting.`
             }, { quoted: mek });
         }
 
         // ═══════════════════════════════════════════════════════════
-        // 1️⃣ MODE 1 - DELETE ONLY
+        // 🔄 RESET TO GLOBAL (Follow config.ANTI_LINK)
         // ═══════════════════════════════════════════════════════════
-        if (option === 'mode1' || option === '1' || option === 'delete' || option === 'deleteonly') {
-            setGroupSettings(from, currentSettings.enabled, 1);
+        if (option === 'reset' || option === 'global' || option === 'default') {
+            resetGroupToGlobal(from);
 
             await conn.sendMessage(from, { 
-                react: { text: "1️⃣", key: mek.key } 
+                react: { text: "🔄", key: mek.key } 
             });
 
+            const newSettings = getGroupSettings(from);
+            const statusText = newSettings.enabled ? "ON (Mode 1)" : "OFF";
+
             return await conn.sendMessage(from, { 
-                text: `1️⃣ *Mode 1 Activated: Delete Only*\n\n📋 *Features:*\n• All links will be deleted\n• No one will be kicked\n• Warning message sent\n\n${currentSettings.enabled ? "✅ Anti-Link is ON" : "⚠️ Anti-Link is OFF. Use *.antilink on* to enable."}`
+                text: `🔄 *Reset to Global Settings!*\n\n🌐 *Config ANTI_LINK:* ${configAntiLink ? "TRUE" : "FALSE"}\n📋 *Status:* ${statusText}\n\n💡 Now following Heroku config settings.`
             }, { quoted: mek });
         }
 
@@ -335,14 +385,20 @@ async (conn, mek, m, { from, args, q, isGroup, sender, reply }) => {
         // 2️⃣ MODE 2 - SMART MODE
         // ═══════════════════════════════════════════════════════════
         if (option === 'mode2' || option === '2' || option === 'smart' || option === 'warn') {
-            setGroupSettings(from, currentSettings.enabled, 2);
+            if (!isBotAdmin) {
+                return await conn.sendMessage(from, { 
+                    text: "❌ I need to be an admin to use Anti-Link!" 
+                }, { quoted: mek });
+            }
+
+            setGroupSettings(from, true, 2, true);
 
             await conn.sendMessage(from, { 
                 react: { text: "2️⃣", key: mek.key } 
             });
 
             return await conn.sendMessage(from, { 
-                text: `2️⃣ *Mode 2 Activated: Smart Mode*\n\n📋 *Features:*\n• All links will be deleted\n• WhatsApp Group links = KICK\n• WhatsApp Channel links = KICK\n• Other links = Warning only\n\n${currentSettings.enabled ? "✅ Anti-Link is ON" : "⚠️ Anti-Link is OFF. Use *.antilink on* to enable."}`
+                text: `2️⃣ *Mode 2 Activated: Smart Mode*\n\n📋 *Features:*\n• All links will be deleted\n• WhatsApp Group links = KICK ⛔\n• WhatsApp Channel links = KICK ⛔\n• Other links = Warning only ⚠️\n\n✅ Anti-Link is now ON with Smart Mode!`
             }, { quoted: mek });
         }
 
@@ -350,14 +406,20 @@ async (conn, mek, m, { from, args, q, isGroup, sender, reply }) => {
         // 3️⃣ MODE 3 - STRICT MODE
         // ═══════════════════════════════════════════════════════════
         if (option === 'mode3' || option === '3' || option === 'strict' || option === 'kick' || option === 'kickall') {
-            setGroupSettings(from, currentSettings.enabled, 3);
+            if (!isBotAdmin) {
+                return await conn.sendMessage(from, { 
+                    text: "❌ I need to be an admin to use Anti-Link!" 
+                }, { quoted: mek });
+            }
+
+            setGroupSettings(from, true, 3, true);
 
             await conn.sendMessage(from, { 
                 react: { text: "3️⃣", key: mek.key } 
             });
 
             return await conn.sendMessage(from, { 
-                text: `3️⃣ *Mode 3 Activated: Strict Mode*\n\n📋 *Features:*\n• All links will be deleted\n• ANY link = INSTANT KICK\n• Maximum security level\n\n⚠️ *Warning:* This is the strictest mode!\n\n${currentSettings.enabled ? "✅ Anti-Link is ON" : "⚠️ Anti-Link is OFF. Use *.antilink on* to enable."}`
+                text: `3️⃣ *Mode 3 Activated: Strict Mode*\n\n📋 *Features:*\n• All links will be deleted\n• ANY link = INSTANT KICK ⛔\n• Maximum security level\n\n⚠️ *Warning:* This is the strictest mode!\n\n✅ Anti-Link is now ON with Strict Mode!`
             }, { quoted: mek });
         }
 
@@ -393,7 +455,7 @@ cmd({
         if (!isGroup) return;
         if (!body) return;
 
-        // Get group settings
+        // Get group settings (now includes config.ANTI_LINK check)
         const settings = getGroupSettings(from);
         
         // Check if anti-link is enabled
@@ -435,7 +497,7 @@ cmd({
         const mode = settings.mode || 1;
 
         // ═══════════════════════════════════════════════════════════
-        // 🎯 MODE 1: DELETE ONLY (No Kick)
+        // 🎯 MODE 1: DELETE ONLY (No Kick) - LINKED WITH CONFIG
         // ═══════════════════════════════════════════════════════════
         if (mode === 1) {
             // Delete the message
