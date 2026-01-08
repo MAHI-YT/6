@@ -28,46 +28,45 @@ async (conn, mek, m, { from, args, q, reply, react }) => {
         }
 
         const apiUrl = `https://fam-official.serv00.net/api/database.php?number=${number}`;
-        const { data } = await axios.get(apiUrl);
+        const response = await axios.get(apiUrl);
 
-        if (!data || !data.success) {
-            await react("❌");
-            return reply("Failed to fetch SIM data or number not found in database.");
-        }
-
-        // Check if data exists
-        if (!data.data || Object.keys(data.data).length === 0) {
-            await react("❌");
-            return reply("No information found for this number in the database.");
-        }
-
-        // Format the response with actual data
-        let response = `📱 *SIM DATA INFORMATION*\n\n`;
-        response += `📞 *Number:* ${number}\n\n`;
+        // Format the response
+        let message = `📱 *SIM DATA INFORMATION*\n\n`;
+        message += `📞 *Number:* ${number}\n\n`;
         
-        const simData = data.data;
-        
-        if (simData.name) response += `👤 *Name:* ${simData.name}\n`;
-        if (simData.owner) response += `👤 *Owner Name:* ${simData.owner}\n`;
-        if (simData.cnic) response += `🪪 *CNIC:* ${simData.cnic}\n`;
-        if (simData.address) response += `📍 *Address:* ${simData.address}\n`;
-        if (simData.city) response += `🏙️ *City:* ${simData.city}\n`;
-        if (simData.network) response += `📡 *Network:* ${simData.network}\n`;
-        
-        // Add any other fields that might be present
-        for (let key in simData) {
-            if (!['name', 'owner', 'cnic', 'address', 'city', 'network'].includes(key)) {
-                response += `${key}: ${simData[key]}\n`;
+        if (response.data) {
+            const result = response.data;
+            
+            // Check if success
+            if (result.success === false) {
+                await react("❌");
+                return reply("Number not found in database.");
             }
+            
+            // Check for data object
+            if (result.data && typeof result.data === 'object') {
+                const info = result.data;
+                
+                if (info.name) message += `👤 *Name:* ${info.name}\n`;
+                if (info.owner) message += `👤 *Owner:* ${info.owner}\n`;
+                if (info.cnic) message += `🪪 *CNIC:* ${info.cnic}\n`;
+                if (info.address) message += `📍 *Address:* ${info.address}\n`;
+                if (info.city) message += `🏙️ *City:* ${info.city}\n`;
+                if (info.network) message += `📡 *Network:* ${info.network}\n`;
+            } else if (typeof result.data === 'string' && result.data.trim()) {
+                message += `📋 *Data:*\n${result.data}\n`;
+            }
+            
+            if (result.credit) message += `\n💳 *Credit:* ${result.credit}`;
+            if (result.success) message += `\n✅ *Status:* Success`;
         }
-        
-        response += `\n💳 *Credit:* ${data.credit || 'FAMOFC'}`;
 
-        await reply(response);
+        await reply(message);
         await react("✅");
+        
     } catch (e) {
         console.error("Error in SIM data command:", e);
         await react("❌");
-        reply("An error occurred while fetching SIM data. Please check the number and try again.");
+        return reply("An error occurred while fetching SIM data.\nError: " + e.message);
     }
 });
