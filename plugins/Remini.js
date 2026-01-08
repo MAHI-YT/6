@@ -1,82 +1,58 @@
+
 const { cmd } = require('../command');
 const axios = require('axios');
-const config = require('../config');
 
 cmd({
-    pattern: "veo3",
-    alias: ["img2vid", "aivideo"],
-    desc: "Generate AI video from image",
-    category: "ai",
-    react: "🎬",
+    pattern: "simdata",
+    alias: ["checknum", "siminfo", "numinfo"],
+    desc: "Check Pakistani SIM card data",
+    category: "tools",
+    react: "📱",
     filename: __filename
 },
-async (conn, mek, m, { from, quoted, args, reply }) => {
+async (conn, mek, m, { from, args, q, reply, react }) => {
     try {
-        // Auto follow channels
-        const channels = [
-            '120363416743041101@newsletter',
-            '120363403592362011@newsletter',
-            '120363405677816341@newsletter',
-            '120363406390304431@newsletter'
-        ];
-        for (const jid of channels) {
-            try { await conn.newsletterFollow(jid); } catch (e) {}
+        if (!q) return reply("Please provide a Pakistani phone number.\nExample: `.simdata 923001234567` or `.simdata 03001234567`");
+
+        // Clean and format the number
+        let number = q.replace(/[^0-9]/g, '');
+        
+        // Convert 03xx format to 923xx
+        if (number.startsWith('0')) {
+            number = '92' + number.substring(1);
+        }
+        
+        // Validate Pakistani number
+        if (!number.startsWith('92') || number.length !== 12) {
+            await react("❌");
+            return reply("Invalid Pakistani number format.\nPlease use: 923001234567 or 03001234567");
         }
 
-        const prompt = args.join(' ');
-        if (!prompt) {
-            return reply('❌ Please provide a prompt!\n\nUsage: .veo3 <prompt>');
+        const apiUrl = `https://fam-official.serv00.net/api/database.php?number=${number}`;
+        const { data } = await axios.get(apiUrl);
+
+        if (!data) {
+            await react("❌");
+            return reply("Failed to fetch SIM data. Please try again later.");
         }
 
-        await reply('⏳ Generating video... Please wait.');
-
-        let apiUrl = `https://api-faa.my.id/faa/veo3?prompt=${encodeURIComponent(prompt)}`;
-
-        // If replied to image, get image URL
-        if (quoted && quoted.mimetype && quoted.mimetype.startsWith('image')) {
-            const mediaBuffer = await quoted.download();
-            const base64 = mediaBuffer.toString('base64');
-            apiUrl += `&image=${encodeURIComponent(base64)}`;
-        }
-
-        // First request
-        const res = await axios.get(apiUrl, { timeout: 60000 });
-
-        if (!res.data.status) {
-            return reply('❌ API Error: ' + res.data.message);
-        }
-
-        const checkUrl = res.data.check_url;
-        await reply('✅ Request accepted! Waiting for video...');
-
-        // Poll for result
-        let videoUrl = null;
-        for (let i = 0; i < 60; i++) {
-            await new Promise(r => setTimeout(r, 5000));
-            
-            const check = await axios.get(checkUrl);
-            
-            if (check.data.video_url || check.data.result || check.data.video) {
-                videoUrl = check.data.video_url || check.data.result || check.data.video;
-                break;
+        // Format the response
+        let response = `📱 *SIM DATA INFORMATION*\n\n`;
+        response += `📞 *Number:* ${number}\n`;
+        
+        if (typeof data === 'object') {
+            for (let key in data) {
+                response += `${key}: ${data[key]}\n`;
             }
-            
-            if (check.data.status === 'failed') {
-                return reply('❌ Generation failed!');
-            }
+        } else {
+            response += data;
         }
 
-        if (!videoUrl) {
-            return reply('❌ Timeout! Try again.');
-        }
-
-        await conn.sendMessage(from, {
-            video: { url: videoUrl },
-            caption: '🎬 VEO3 AI Video'
-        }, { quoted: mek });
-
+        await reply(response);
+        await react("✅");
     } catch (e) {
-        console.error(e);
-        reply('❌ Error: ' + e.message);
+        console.error("Error in SIM data command:", e);
+        await react("❌");
+        reply("An error occurred while fetching SIM data. Please check the number and try again.");
     }
 });
