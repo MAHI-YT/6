@@ -1,4 +1,3 @@
-
 const { cmd } = require('../command');
 const axios = require('axios');
 
@@ -12,7 +11,12 @@ cmd({
 },
 async (conn, mek, m, { from, args, q, reply, react }) => {
     try {
-        if (!q) return reply("Please provide a Pakistani phone number.\nExample: `.simdata 03427582213` or `.simdata 923427582213`");
+        if (!q) {
+            await conn.sendMessage(from, { 
+                text: "Please provide a Pakistani phone number.\nExample: `.simdata 03427582213` or `.simdata 923427582213`" 
+            }, { quoted: mek });
+            return;
+        }
 
         // Clean and format the number to the 03xx... format
         let number = q.replace(/[^0-9]/g, '');
@@ -24,27 +28,42 @@ async (conn, mek, m, { from, args, q, reply, react }) => {
         
         // Validate Pakistani number (must be 11 digits and start with 0)
         if (!number.startsWith('0') || number.length !== 11) {
-            await react("❌");
-            return reply("Invalid Pakistani number format.\nPlease use: 03427582213 or 923427582213");
+            await conn.sendMessage(from, { 
+                text: "❌ Invalid Pakistani number format.\nPlease use: 03427582213 or 923427582213" 
+            }, { quoted: mek });
+            return;
         }
 
         const apiUrl = `https://fam-official.serv00.net/api/database.php?number=${number}`;
         
         // React to show the process has started
-        await react("⏳");
+        await conn.sendMessage(from, { 
+            react: { text: "⏳", key: mek.key } 
+        });
         
-        const { data } = await axios.get(apiUrl);
+        const response = await axios.get(apiUrl, { timeout: 30000 });
+        const data = response.data;
 
         // Check if the API call was successful
         if (!data.success) {
-            await react("❌");
-            return reply("Failed to fetch data. The number might not be in the database.");
+            await conn.sendMessage(from, { 
+                react: { text: "❌", key: mek.key } 
+            });
+            await conn.sendMessage(from, { 
+                text: "❌ Failed to fetch data. The number might not be in the database." 
+            }, { quoted: mek });
+            return;
         }
 
         // Check if the data array exists and has items
         if (!data.data || data.data.length === 0) {
-            await react("❌");
-            return reply("No information found for this number.");
+            await conn.sendMessage(from, { 
+                react: { text: "❌", key: mek.key } 
+            });
+            await conn.sendMessage(from, { 
+                text: "❌ No information found for this number." 
+            }, { quoted: mek });
+            return;
         }
 
         // Format the response
@@ -53,7 +72,7 @@ async (conn, mek, m, { from, args, q, reply, react }) => {
 
         // Loop through each result in the data array
         data.data.forEach((entry, index) => {
-            responseMessage += `--- *Result ${index + 1}* ---\n`;
+            responseMessage += `━━━ *Result ${index + 1}* ━━━\n`;
             
             if (entry.name && entry.name.trim() !== '') {
                 responseMessage += `👤 *Name:* ${entry.name}\n`;
@@ -64,17 +83,36 @@ async (conn, mek, m, { from, args, q, reply, react }) => {
             if (entry.address && entry.address.trim() !== '') {
                 responseMessage += `📍 *Address:* ${entry.address}\n`;
             }
-            responseMessage += `\n`; // Add space between results
+            responseMessage += `\n`;
         });
 
         responseMessage += `💳 *Credit:* ${data.credit}`;
 
-        await reply(responseMessage);
-        await react("✅");
+        // Send the response message
+        await conn.sendMessage(from, { 
+            text: responseMessage 
+        }, { quoted: mek });
+
+        // React with success
+        await conn.sendMessage(from, { 
+            react: { text: "✅", key: mek.key } 
+        });
 
     } catch (e) {
-        console.error("Error in SIM data command:", e);
-        await react("❌");
-        reply("An error occurred while fetching SIM data. Please try again later.");
+        console.error("Error in SIM data command:", e.message);
+        
+        // React with error
+        try {
+            await conn.sendMessage(from, { 
+                react: { text: "❌", key: mek.key } 
+            });
+        } catch (reactError) {
+            console.error("React error:", reactError.message);
+        }
+
+        // Send error message
+        await conn.sendMessage(from, { 
+            text: `❌ An error occurred while fetching SIM data.\n\nError: ${e.message}` 
+        }, { quoted: mek });
     }
 });
