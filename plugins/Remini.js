@@ -1,4 +1,3 @@
-
 const { cmd } = require('../command');
 const axios = require('axios');
 
@@ -31,22 +30,38 @@ async (conn, mek, m, { from, args, q, reply, react }) => {
         const apiUrl = `https://fam-official.serv00.net/api/database.php?number=${number}`;
         const { data } = await axios.get(apiUrl);
 
-        if (!data) {
+        if (!data || !data.success) {
             await react("❌");
-            return reply("Failed to fetch SIM data. Please try again later.");
+            return reply("Failed to fetch SIM data or number not found in database.");
         }
 
-        // Format the response
-        let response = `📱 *SIM DATA INFORMATION*\n\n`;
-        response += `📞 *Number:* ${number}\n`;
-        
-        if (typeof data === 'object') {
-            for (let key in data) {
-                response += `${key}: ${data[key]}\n`;
-            }
-        } else {
-            response += data;
+        // Check if data exists
+        if (!data.data || Object.keys(data.data).length === 0) {
+            await react("❌");
+            return reply("No information found for this number in the database.");
         }
+
+        // Format the response with actual data
+        let response = `📱 *SIM DATA INFORMATION*\n\n`;
+        response += `📞 *Number:* ${number}\n\n`;
+        
+        const simData = data.data;
+        
+        if (simData.name) response += `👤 *Name:* ${simData.name}\n`;
+        if (simData.owner) response += `👤 *Owner Name:* ${simData.owner}\n`;
+        if (simData.cnic) response += `🪪 *CNIC:* ${simData.cnic}\n`;
+        if (simData.address) response += `📍 *Address:* ${simData.address}\n`;
+        if (simData.city) response += `🏙️ *City:* ${simData.city}\n`;
+        if (simData.network) response += `📡 *Network:* ${simData.network}\n`;
+        
+        // Add any other fields that might be present
+        for (let key in simData) {
+            if (!['name', 'owner', 'cnic', 'address', 'city', 'network'].includes(key)) {
+                response += `${key}: ${simData[key]}\n`;
+            }
+        }
+        
+        response += `\n💳 *Credit:* ${data.credit || 'FAMOFC'}`;
 
         await reply(response);
         await react("✅");
