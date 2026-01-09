@@ -50,26 +50,69 @@ async (conn, mek, m, { from, quoted, reply }) => {
             'tmpfiles.org/dl/'
         );
 
-        // Call ToAnime API - Response is direct image
+        // Call ToAnime API
         const apiUrl = `https://api-faa.my.id/faa/toanime?url=${encodeURIComponent(imageUrl)}`;
 
         const apiRes = await axios.get(apiUrl, { 
-            timeout: 60000,
-            responseType: 'arraybuffer'
+            timeout: 120000
         });
 
-        // Send anime style image
-        await conn.sendMessage(
-            from,
-            {
-                image: Buffer.from(apiRes.data),
-                caption: "> 🎨 Converted to Anime Style by DARKZONE-MD"
-            },
-            { quoted: m }
-        );
+        // Check response type
+        const apiData = apiRes.data;
+
+        // If response is JSON with result/data
+        if (apiData && apiData.result) {
+            await conn.sendMessage(
+                from,
+                {
+                    image: { url: apiData.result },
+                    caption: "> 🎨 Converted to Anime Style by DARKZONE-MD"
+                },
+                { quoted: m }
+            );
+        } 
+        // If response has data.result
+        else if (apiData && apiData.data && apiData.data.result) {
+            await conn.sendMessage(
+                from,
+                {
+                    image: { url: apiData.data.result },
+                    caption: "> 🎨 Converted to Anime Style by DARKZONE-MD"
+                },
+                { quoted: m }
+            );
+        }
+        // If response has url/image directly
+        else if (apiData && (apiData.url || apiData.image || apiData.imageUrl)) {
+            await conn.sendMessage(
+                from,
+                {
+                    image: { url: apiData.url || apiData.image || apiData.imageUrl },
+                    caption: "> 🎨 Converted to Anime Style by DARKZONE-MD"
+                },
+                { quoted: m }
+            );
+        }
+        // If response is direct buffer/image
+        else {
+            const bufferRes = await axios.get(apiUrl, {
+                timeout: 120000,
+                responseType: 'arraybuffer'
+            });
+            
+            await conn.sendMessage(
+                from,
+                {
+                    image: Buffer.from(bufferRes.data),
+                    caption: "> 🎨 Converted to Anime Style by DARKZONE-MD"
+                },
+                { quoted: m }
+            );
+        }
 
     } catch (err) {
-        console.error("TOANIME ERROR:", err);
+        console.error("TOANIME ERROR:", err.message);
+        console.error("Full Error:", err);
         reply("❌ Anime conversion failed. Please try again.");
     }
 });
