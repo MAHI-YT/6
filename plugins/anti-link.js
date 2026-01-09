@@ -4,104 +4,101 @@ const fs = require('fs');
 const path = require('path');
 
 // ═══════════════════════════════════════════════════════════
-// 📁 DATABASE FILE FOR STORING ANTI-LINK SETTINGS
+// 📁 DATABASE FILE FOR STATUS REACT SETTINGS
 // ═══════════════════════════════════════════════════════════
-const antiLinkDbPath = path.join(__dirname, '../database/antilink.json');
+const statusReactDbPath = path.join(__dirname, '../database/statusreact.json');
 
 // Ensure database directory exists
 function ensureDbExists() {
-    const dbDir = path.dirname(antiLinkDbPath);
+    const dbDir = path.dirname(statusReactDbPath);
     if (!fs.existsSync(dbDir)) {
         fs.mkdirSync(dbDir, { recursive: true });
     }
-    if (!fs.existsSync(antiLinkDbPath)) {
-        fs.writeFileSync(antiLinkDbPath, JSON.stringify({}), 'utf8');
+    if (!fs.existsSync(statusReactDbPath)) {
+        fs.writeFileSync(statusReactDbPath, JSON.stringify({
+            enabled: false,
+            emoji: '❤️',
+            reactedStatuses: [],
+            stats: {
+                totalReacted: 0,
+                lastReacted: null
+            }
+        }), 'utf8');
     }
 }
 
-// Load anti-link settings
-function loadAntiLinkSettings() {
+// Load settings
+function loadSettings() {
     try {
         ensureDbExists();
-        const data = fs.readFileSync(antiLinkDbPath, 'utf8');
+        const data = fs.readFileSync(statusReactDbPath, 'utf8');
         return JSON.parse(data);
     } catch (error) {
-        return {};
+        return {
+            enabled: false,
+            emoji: '❤️',
+            reactedStatuses: [],
+            stats: {
+                totalReacted: 0,
+                lastReacted: null
+            }
+        };
     }
 }
 
-// Save anti-link settings
-function saveAntiLinkSettings(settings) {
+// Save settings
+function saveSettings(settings) {
     try {
         ensureDbExists();
-        fs.writeFileSync(antiLinkDbPath, JSON.stringify(settings, null, 2), 'utf8');
+        fs.writeFileSync(statusReactDbPath, JSON.stringify(settings, null, 2), 'utf8');
         return true;
     } catch (error) {
-        console.error('Error saving antilink settings:', error);
+        console.error('Error saving status react settings:', error);
         return false;
     }
 }
 
-// Get group settings with config.ANTI_LINK support
-function getGroupSettings(groupId) {
-    const settings = loadAntiLinkSettings();
-    const groupData = settings[groupId];
-    
-    // Check if config.ANTI_LINK is enabled (for global Mode 1)
-    const configAntiLink = config.ANTI_LINK === 'true' || config.ANTI_LINK === true;
-    
-    // If group has custom settings, use them
-    if (groupData && groupData.customSet === true) {
-        return {
-            enabled: groupData.enabled,
-            mode: groupData.mode,
-            isGlobal: false
-        };
-    }
-    
-    // If no custom settings, use config.ANTI_LINK for Mode 1 (global)
-    if (configAntiLink) {
-        return {
-            enabled: true,
-            mode: 1,
-            isGlobal: true
-        };
-    }
-    
-    // Default: disabled
-    return {
-        enabled: false,
-        mode: 1,
-        isGlobal: false
-    };
+// Check if status react is enabled (config or custom setting)
+function isStatusReactEnabled() {
+    const settings = loadSettings();
+    const configEnabled = config.AUTO_STATUS_REACT === 'true' || config.AUTO_STATUS_REACT === true;
+    return settings.enabled || configEnabled;
 }
 
-// Set group settings (custom override)
-function setGroupSettings(groupId, enabled, mode, customSet = true) {
-    const settings = loadAntiLinkSettings();
-    settings[groupId] = { 
-        enabled, 
-        mode, 
-        customSet  // This flag indicates group has custom settings
-    };
-    return saveAntiLinkSettings(settings);
+// Get current emoji
+function getCurrentEmoji() {
+    const settings = loadSettings();
+    return settings.emoji || config.STATUS_REACT_EMOJI || '❤️';
 }
 
-// Reset group to global settings (follow config.ANTI_LINK)
-function resetGroupToGlobal(groupId) {
-    const settings = loadAntiLinkSettings();
-    if (settings[groupId]) {
-        delete settings[groupId];
-        return saveAntiLinkSettings(settings);
+// Add reacted status to history
+function addReactedStatus(statusId, sender) {
+    const settings = loadSettings();
+    
+    // Keep only last 100 entries to prevent file from growing too large
+    if (settings.reactedStatuses.length >= 100) {
+        settings.reactedStatuses = settings.reactedStatuses.slice(-50);
     }
-    return true;
+    
+    settings.reactedStatuses.push({
+        id: statusId,
+        sender: sender,
+        time: new Date().toISOString()
+    });
+    
+    settings.stats.totalReacted++;
+    settings.stats.lastReacted = new Date().toISOString();
+    
+    saveSettings(settings);
 }
 
-// ═══════════════════════════════════════════════════════════
-// 🔧 HELPER FUNCTIONS WITH LID SUPPORT
-// ═══════════════════════════════════════════════════════════
+// Check if already reacted to this status
+function hasReacted(statusId) {
+    const settings = loadSettings();
+    return settings.reactedStatuses.some(s => s.id === statusId);
+}
 
-// Extract number from any ID format
+// Extract number from ID
 function extractNumber(id) {
     if (!id) return '';
     let num = id;
@@ -110,216 +107,87 @@ function extractNumber(id) {
     return num.replace(/[^0-9]/g, '');
 }
 
-// Check admin status with full LID support
-async function checkAdminStatus(conn, chatId, senderId) {
-    try {
-        const metadata = await conn.groupMetadata(chatId);
-        const participants = metadata.participants || [];
-        
-        const botId = conn.user?.id || '';
-        const botLid = conn.user?.lid || '';
-        const botNumber = extractNumber(botId);
-        const botLidNumber = extractNumber(botLid);
-        
-        const senderNumber = extractNumber(senderId);
-        
-        let isBotAdmin = false;
-        let isSenderAdmin = false;
-        let isSenderSuperAdmin = false;
-        
-        for (let p of participants) {
-            const pNumber = extractNumber(p.id);
-            const pLidNumber = p.lid ? extractNumber(p.lid) : '';
-            const pPhoneNumber = p.phoneNumber ? extractNumber(p.phoneNumber) : '';
-            
-            const isAdmin = p.admin === "admin" || p.admin === "superadmin";
-            
-            if (isAdmin) {
-                // Check bot
-                if (pNumber === botNumber || pLidNumber === botNumber || 
-                    pNumber === botLidNumber || pLidNumber === botLidNumber ||
-                    pPhoneNumber === botNumber) {
-                    isBotAdmin = true;
-                }
-                
-                // Check sender
-                if (pNumber === senderNumber || pLidNumber === senderNumber ||
-                    pPhoneNumber === senderNumber) {
-                    isSenderAdmin = true;
-                    if (p.admin === "superadmin") {
-                        isSenderSuperAdmin = true;
-                    }
-                }
-            }
-        }
-        
-        return { isBotAdmin, isSenderAdmin, isSenderSuperAdmin };
-        
-    } catch (err) {
-        console.error('❌ Error checking admin status:', err);
-        return { isBotAdmin: false, isSenderAdmin: false, isSenderSuperAdmin: false };
-    }
-}
-
 // Check if user is owner
 function isOwnerUser(senderId) {
     const senderNumber = extractNumber(senderId);
-    
     if (!config.OWNER_NUMBER) return false;
-    
     const ownerNumber = extractNumber(config.OWNER_NUMBER);
-    
     return senderNumber === ownerNumber;
 }
 
-// Get participant ID for removal (LID compatible)
-async function getParticipantId(conn, chatId, senderId) {
-    try {
-        const metadata = await conn.groupMetadata(chatId);
-        const participants = metadata.participants || [];
-        
-        const senderNumber = extractNumber(senderId);
-        
-        for (let p of participants) {
-            const pNumber = extractNumber(p.id);
-            const pLidNumber = p.lid ? extractNumber(p.lid) : '';
-            const pPhoneNumber = p.phoneNumber ? extractNumber(p.phoneNumber) : '';
-            
-            if (pNumber === senderNumber || pLidNumber === senderNumber ||
-                pPhoneNumber === senderNumber) {
-                return { found: true, participantId: p.id };
-            }
-        }
-        return { found: false, participantId: senderId };
-    } catch (err) {
-        console.error('❌ Error getting participant ID:', err);
-        return { found: false, participantId: senderId };
-    }
-}
-
 // ═══════════════════════════════════════════════════════════
-// 📋 ANTI-LINK COMMAND (Settings Panel)
+// 📋 STATUS REACT COMMAND (Settings Panel)
 // ═══════════════════════════════════════════════════════════
 
 cmd({
-    pattern: "antilink",
-    alias: ["antilinkmode", "al"],
-    desc: "Configure Anti-Link settings for the group",
-    category: "group",
-    react: "🔗",
+    pattern: "irfna5",
+    alias: ["autoreact", "sreact", "statuslike", "autostatus"],
+    desc: "Configure Auto Status React settings",
+    category: "tools",
+    react: "👁️",
     filename: __filename
 },
-async (conn, mek, m, { from, args, q, isGroup, sender, reply }) => {
+async (conn, mek, m, { from, args, q, sender, reply }) => {
     try {
-        // Only works in groups
-        if (!isGroup) {
-            return await conn.sendMessage(from, { 
-                text: "❌ This command only works in groups!" 
-            }, { quoted: mek });
-        }
-
-        const senderId = m.key?.participant || sender;
+        const senderId = sender;
         
-        // Check admin status
-        const { isBotAdmin, isSenderAdmin } = await checkAdminStatus(conn, from, senderId);
-        const isOwner = isOwnerUser(senderId);
-
-        // Only admins and owner can configure
-        if (!isSenderAdmin && !isOwner) {
+        // Only owner can configure
+        if (!isOwnerUser(senderId)) {
             return await conn.sendMessage(from, { 
-                text: "❌ Only group admins can configure Anti-Link!" 
+                text: "❌ Only bot owner can configure Status React!" 
             }, { quoted: mek });
         }
 
-        // Get current settings
-        const currentSettings = getGroupSettings(from);
+        const settings = loadSettings();
         const option = q ? q.toLowerCase().trim() : '';
-        
-        // Check config status
-        const configAntiLink = config.ANTI_LINK === 'true' || config.ANTI_LINK === true;
+        const configEnabled = config.AUTO_STATUS_REACT === 'true' || config.AUTO_STATUS_REACT === true;
 
         // ═══════════════════════════════════════════════════════════
         // 📊 SHOW MENU (No arguments)
         // ═══════════════════════════════════════════════════════════
         if (!option) {
-            const statusEmoji = currentSettings.enabled ? "🟢" : "🔴";
-            const statusText = currentSettings.enabled ? "ON" : "OFF";
-            const globalEmoji = currentSettings.isGlobal ? "🌍" : "⚙️";
-            const globalText = currentSettings.isGlobal ? "(Global/Config)" : "(Custom)";
-            
-            let modeText = "";
-            switch(currentSettings.mode) {
-                case 1:
-                    modeText = "Mode 1: Delete Only";
-                    break;
-                case 2:
-                    modeText = "Mode 2: Delete All + Kick WA Links";
-                    break;
-                case 3:
-                    modeText = "Mode 3: Delete + Kick All Links";
-                    break;
-                default:
-                    modeText = "Mode 1: Delete Only";
-            }
+            const isEnabled = isStatusReactEnabled();
+            const statusEmoji = isEnabled ? "🟢" : "🔴";
+            const statusText = isEnabled ? "ON" : "OFF";
+            const currentEmoji = getCurrentEmoji();
 
             const menuText = `
-╔═══════════════════════════╗
-║    🔗 *ANTI-LINK SYSTEM* 🔗    ║
-╠═══════════════════════════╣
-║                           
+╔═══════════════════════════════╗
+║  👁️ *AUTO STATUS REACT* 👁️   ║
+╠═══════════════════════════════╣
+║                               
 ║  ${statusEmoji} *Status:* ${statusText}
-║  📋 *Current:* ${modeText}
-║  ${globalEmoji} *Source:* ${globalText}
-║                           
-║  🌐 *Config ANTI_LINK:* ${configAntiLink ? "✅ TRUE" : "❌ FALSE"}
-║                           
-╠═══════════════════════════╣
-║     📚 *AVAILABLE MODES*      ║
-╠═══════════════════════════╣
-║                           
-║  *Mode 1️⃣ - Delete Only* 🌍
-║  ➤ Linked with Config
-║  ➤ Deletes all links
-║  ➤ No one gets kicked
-║  ➤ Auto ON when ANTI_LINK=true
-║                           
-║  *Mode 2️⃣ - Smart Mode* ⚙️
-║  ➤ Custom per group
-║  ➤ Deletes all links
-║  ➤ Kicks only for WA links
-║  ➤ (Groups/Channels)
-║                           
-║  *Mode 3️⃣ - Strict Mode* ⚙️
-║  ➤ Custom per group
-║  ➤ Deletes all links
-║  ➤ Kicks for ANY link
-║  ➤ Maximum security
-║                           
-╠═══════════════════════════╣
-║       ⌨️ *COMMANDS*          ║
-╠═══════════════════════════╣
-║                           
-║  *.antilink on*
-║  ➤ Turn ON (Mode 1)
-║                           
-║  *.antilink off*
-║  ➤ Turn OFF Anti-Link
-║                           
-║  *.antilink mode2*
-║  ➤ Set to Smart Mode
-║                           
-║  *.antilink mode3*
-║  ➤ Set to Strict Mode
-║                           
-║  *.antilink reset*
-║  ➤ Reset to Global/Config
-║                           
-╠═══════════════════════════╣
-║  💡 *Tip:* Set ANTI_LINK=true
-║  in Heroku for auto Mode 1
-║                           
-║  ⚠️ Admins & Owner excluded
-╚═══════════════════════════╝
+║  😍 *React Emoji:* ${currentEmoji}
+║                               
+║  📊 *Statistics:*
+║  ├ Total Reacted: ${settings.stats.totalReacted}
+║  └ Last React: ${settings.stats.lastReacted ? new Date(settings.stats.lastReacted).toLocaleString() : 'Never'}
+║                               
+║  🌐 *Config:* ${configEnabled ? "✅ TRUE" : "❌ FALSE"}
+║                               
+╠═══════════════════════════════╣
+║       ⌨️ *COMMANDS*           ║
+╠═══════════════════════════════╣
+║                               
+║  *.statusreact on*
+║  ➤ Enable Auto Status React
+║                               
+║  *.statusreact off*
+║  ➤ Disable Auto Status React
+║                               
+║  *.statusreact emoji ❤️*
+║  ➤ Change react emoji
+║                               
+║  *.statusreact stats*
+║  ➤ View detailed statistics
+║                               
+║  *.statusreact reset*
+║  ➤ Reset all statistics
+║                               
+╠═══════════════════════════════╣
+║  📝 *Available Emojis:*       ║
+║  ❤️ 😍 🔥 👏 😂 😮 😢 🙏 👍 🎉  ║
+╚═══════════════════════════════╝
 `.trim();
 
             return await conn.sendMessage(from, { 
@@ -328,98 +196,114 @@ async (conn, mek, m, { from, args, q, isGroup, sender, reply }) => {
         }
 
         // ═══════════════════════════════════════════════════════════
-        // 🟢 TURN ON (Mode 1 - Delete Only)
+        // 🟢 TURN ON
         // ═══════════════════════════════════════════════════════════
-        if (option === 'on' || option === 'enable' || option === 'mode1' || option === '1') {
-            if (!isBotAdmin) {
-                return await conn.sendMessage(from, { 
-                    text: "❌ I need to be an admin to use Anti-Link!" 
-                }, { quoted: mek });
-            }
-
-            setGroupSettings(from, true, 1, true);
+        if (option === 'on' || option === 'enable' || option === 'true') {
+            settings.enabled = true;
+            saveSettings(settings);
 
             await conn.sendMessage(from, { 
                 react: { text: "✅", key: mek.key } 
             });
 
             return await conn.sendMessage(from, { 
-                text: `✅ *Anti-Link Enabled!*\n\n📋 *Mode:* 1️⃣ Delete Only\n\n📝 *Features:*\n• All links will be deleted\n• No one will be kicked\n• Warning message sent\n\n⚠️ Anyone who sends links will have their message deleted!`
+                text: `✅ *Auto Status React Enabled!*\n\n😍 *React Emoji:* ${getCurrentEmoji()}\n\n📝 Bot will now automatically react to all status updates!\n\n💡 Use *.statusreact emoji [emoji]* to change reaction.`
             }, { quoted: mek });
         }
 
         // ═══════════════════════════════════════════════════════════
         // 🔴 TURN OFF
         // ═══════════════════════════════════════════════════════════
-        if (option === 'off' || option === 'disable') {
-            setGroupSettings(from, false, 1, true);
+        if (option === 'off' || option === 'disable' || option === 'false') {
+            settings.enabled = false;
+            saveSettings(settings);
 
             await conn.sendMessage(from, { 
                 react: { text: "✅", key: mek.key } 
             });
 
             return await conn.sendMessage(from, { 
-                text: `🔴 *Anti-Link Disabled!*\n\n✅ Members can now share links freely.\n\n💡 *Note:* This overrides global config setting.`
+                text: `🔴 *Auto Status React Disabled!*\n\n✅ Bot will no longer react to status updates.`
             }, { quoted: mek });
         }
 
         // ═══════════════════════════════════════════════════════════
-        // 🔄 RESET TO GLOBAL (Follow config.ANTI_LINK)
+        // 😍 CHANGE EMOJI
         // ═══════════════════════════════════════════════════════════
-        if (option === 'reset' || option === 'global' || option === 'default') {
-            resetGroupToGlobal(from);
+        if (option.startsWith('emoji')) {
+            const newEmoji = option.replace('emoji', '').trim() || args[1];
+            
+            if (!newEmoji) {
+                return await conn.sendMessage(from, { 
+                    text: `❌ Please provide an emoji!\n\n*Example:* .statusreact emoji ❤️\n\n*Available:* ❤️ 😍 🔥 👏 😂 😮 😢 🙏 👍 🎉`
+                }, { quoted: mek });
+            }
+
+            settings.emoji = newEmoji;
+            saveSettings(settings);
+
+            await conn.sendMessage(from, { 
+                react: { text: newEmoji, key: mek.key } 
+            });
+
+            return await conn.sendMessage(from, { 
+                text: `✅ *React Emoji Changed!*\n\n😍 *New Emoji:* ${newEmoji}\n\n📝 All future status reactions will use this emoji.`
+            }, { quoted: mek });
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // 📊 VIEW STATS
+        // ═══════════════════════════════════════════════════════════
+        if (option === 'stats' || option === 'statistics' || option === 'info') {
+            const recentReacts = settings.reactedStatuses.slice(-10).reverse();
+            
+            let statsText = `
+╔═══════════════════════════════╗
+║    📊 *STATUS REACT STATS*    ║
+╠═══════════════════════════════╣
+║                               
+║  📈 *Total Reacted:* ${settings.stats.totalReacted}
+║  😍 *Current Emoji:* ${getCurrentEmoji()}
+║  ⏰ *Last React:* ${settings.stats.lastReacted ? new Date(settings.stats.lastReacted).toLocaleString() : 'Never'}
+║                               
+╠═══════════════════════════════╣
+║    🕐 *RECENT REACTIONS*      ║
+╠═══════════════════════════════╣`.trim();
+
+            if (recentReacts.length > 0) {
+                recentReacts.forEach((r, i) => {
+                    const number = extractNumber(r.sender);
+                    const time = new Date(r.time).toLocaleTimeString();
+                    statsText += `\n║  ${i + 1}. @${number} - ${time}`;
+                });
+            } else {
+                statsText += `\n║  No recent reactions`;
+            }
+
+            statsText += `\n╚═══════════════════════════════╝`;
+
+            return await conn.sendMessage(from, { 
+                text: statsText
+            }, { quoted: mek });
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // 🔄 RESET STATS
+        // ═══════════════════════════════════════════════════════════
+        if (option === 'reset' || option === 'clear') {
+            settings.reactedStatuses = [];
+            settings.stats = {
+                totalReacted: 0,
+                lastReacted: null
+            };
+            saveSettings(settings);
 
             await conn.sendMessage(from, { 
                 react: { text: "🔄", key: mek.key } 
             });
 
-            const newSettings = getGroupSettings(from);
-            const statusText = newSettings.enabled ? "ON (Mode 1)" : "OFF";
-
             return await conn.sendMessage(from, { 
-                text: `🔄 *Reset to Global Settings!*\n\n🌐 *Config ANTI_LINK:* ${configAntiLink ? "TRUE" : "FALSE"}\n📋 *Status:* ${statusText}\n\n💡 Now following Heroku config settings.`
-            }, { quoted: mek });
-        }
-
-        // ═══════════════════════════════════════════════════════════
-        // 2️⃣ MODE 2 - SMART MODE
-        // ═══════════════════════════════════════════════════════════
-        if (option === 'mode2' || option === '2' || option === 'smart' || option === 'warn') {
-            if (!isBotAdmin) {
-                return await conn.sendMessage(from, { 
-                    text: "❌ I need to be an admin to use Anti-Link!" 
-                }, { quoted: mek });
-            }
-
-            setGroupSettings(from, true, 2, true);
-
-            await conn.sendMessage(from, { 
-                react: { text: "2️⃣", key: mek.key } 
-            });
-
-            return await conn.sendMessage(from, { 
-                text: `2️⃣ *Mode 2 Activated: Smart Mode*\n\n📋 *Features:*\n• All links will be deleted\n• WhatsApp Group links = KICK ⛔\n• WhatsApp Channel links = KICK ⛔\n• Other links = Warning only ⚠️\n\n✅ Anti-Link is now ON with Smart Mode!`
-            }, { quoted: mek });
-        }
-
-        // ═══════════════════════════════════════════════════════════
-        // 3️⃣ MODE 3 - STRICT MODE
-        // ═══════════════════════════════════════════════════════════
-        if (option === 'mode3' || option === '3' || option === 'strict' || option === 'kick' || option === 'kickall') {
-            if (!isBotAdmin) {
-                return await conn.sendMessage(from, { 
-                    text: "❌ I need to be an admin to use Anti-Link!" 
-                }, { quoted: mek });
-            }
-
-            setGroupSettings(from, true, 3, true);
-
-            await conn.sendMessage(from, { 
-                react: { text: "3️⃣", key: mek.key } 
-            });
-
-            return await conn.sendMessage(from, { 
-                text: `3️⃣ *Mode 3 Activated: Strict Mode*\n\n📋 *Features:*\n• All links will be deleted\n• ANY link = INSTANT KICK ⛔\n• Maximum security level\n\n⚠️ *Warning:* This is the strictest mode!\n\n✅ Anti-Link is now ON with Strict Mode!`
+                text: `🔄 *Statistics Reset!*\n\n✅ All status react history has been cleared.`
             }, { quoted: mek });
         }
 
@@ -427,11 +311,11 @@ async (conn, mek, m, { from, args, q, isGroup, sender, reply }) => {
         // ❓ UNKNOWN OPTION
         // ═══════════════════════════════════════════════════════════
         return await conn.sendMessage(from, { 
-            text: `❌ Unknown option: *${option}*\n\n💡 Use *.antilink* to see all available options.`
+            text: `❌ Unknown option: *${option}*\n\n💡 Use *.statusreact* to see all available options.`
         }, { quoted: mek });
 
     } catch (e) {
-        console.error("Error in antilink command:", e);
+        console.error("Error in statusreact command:", e);
         await conn.sendMessage(from, { 
             text: `❌ An error occurred: ${e.message}` 
         }, { quoted: mek });
@@ -439,7 +323,7 @@ async (conn, mek, m, { from, args, q, isGroup, sender, reply }) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// 🔍 ANTI-LINK DETECTOR (Runs on every message)
+// 👁️ STATUS DETECTOR & AUTO REACTOR
 // ═══════════════════════════════════════════════════════════
 
 cmd({
@@ -451,148 +335,48 @@ cmd({
     isGroup
 }) => {
     try {
-        // Only run in groups
-        if (!isGroup) return;
-        if (!body) return;
-
-        // Get group settings (now includes config.ANTI_LINK check)
-        const settings = getGroupSettings(from);
+        // Check if this is a status message
+        if (from !== 'status@broadcast') return;
         
-        // Check if anti-link is enabled
-        if (!settings.enabled) return;
+        // Check if status react is enabled
+        if (!isStatusReactEnabled()) return;
 
-        const senderId = m.key?.participant || sender;
-        if (!senderId) return;
+        const statusId = m.key?.id;
+        const statusSender = m.key?.participant || sender;
 
-        // Check admin status
-        const { isBotAdmin, isSenderAdmin } = await checkAdminStatus(conn, from, senderId);
+        // Check if already reacted
+        if (statusId && hasReacted(statusId)) return;
 
-        // Check if sender is owner
-        const isOwner = isOwnerUser(senderId);
+        // Get current emoji
+        const emoji = getCurrentEmoji();
 
-        // Skip if sender is admin or owner (they can post links)
-        if (isSenderAdmin || isOwner) return;
-
-        // Skip if bot is not admin (can't delete or kick)
-        if (!isBotAdmin) return;
-
-        // ═══════════════════════════════════════════════════════════
-        // 🔗 LINK DETECTION PATTERNS
-        // ═══════════════════════════════════════════════════════════
-        
-        // All links pattern
-        const allLinksRegex = /\b((https?:\/\/)?(www\.)?([a-z0-9-]+\.)+[a-z]{2,})(\/\S*)?/gi;
-        
-        // WhatsApp group & channel links (dangerous links)
-        const waLinksRegex = /(chat\.whatsapp\.com\/[A-Za-z0-9]+|whatsapp\.com\/channel\/[A-Za-z0-9]+)/gi;
-
-        const hasAnyLink = allLinksRegex.test(body);
-        const hasWaLink = waLinksRegex.test(body);
-
-        // If no link found, return
-        if (!hasAnyLink) return;
-
-        // Get display number for mentions
-        const displayNumber = extractNumber(senderId);
-        const mode = settings.mode || 1;
-
-        // ═══════════════════════════════════════════════════════════
-        // 🎯 MODE 1: DELETE ONLY (No Kick) - LINKED WITH CONFIG
-        // ═══════════════════════════════════════════════════════════
-        if (mode === 1) {
-            // Delete the message
-            try {
-                await conn.sendMessage(from, { delete: m.key });
-            } catch (delError) {
-                console.error("Failed to delete message:", delError);
-            }
-
-            // Send warning
+        // React to status
+        try {
             await conn.sendMessage(from, {
-                text: `⚠️ *LINK DETECTED!*\n\n@${displayNumber}, links are *not allowed* here!\n\n🗑️ Your message has been deleted.`,
-                mentions: [senderId]
-            });
-
-            return;
-        }
-
-        // ═══════════════════════════════════════════════════════════
-        // 🎯 MODE 2: SMART MODE (Kick only for WA links)
-        // ═══════════════════════════════════════════════════════════
-        if (mode === 2) {
-            // Delete the message first
-            try {
-                await conn.sendMessage(from, { delete: m.key });
-            } catch (delError) {
-                console.error("Failed to delete message:", delError);
-            }
-
-            if (hasWaLink) {
-                // WhatsApp link - DELETE + KICK
-                await conn.sendMessage(from, {
-                    text: `🚨 *WHATSAPP LINK DETECTED!* 🚨\n\n@${displayNumber} shared a *WhatsApp group/channel link!*\n\n⛔ User has been *REMOVED* from this group!`,
-                    mentions: [senderId]
-                });
-
-                // Get participant ID and kick
-                const { participantId } = await getParticipantId(conn, from, senderId);
-                
-                try {
-                    await conn.groupParticipantsUpdate(from, [participantId], "remove");
-                    console.log(`👢 User kicked (Mode 2 - WA Link): ${senderId}`);
-                } catch (kickError) {
-                    console.error("Failed to kick user:", kickError);
-                    await conn.sendMessage(from, {
-                        text: `❌ Failed to remove user. Please remove manually.`
-                    });
+                react: {
+                    text: emoji,
+                    key: m.key
                 }
-            } else {
-                // Normal link - DELETE + WARNING only
-                await conn.sendMessage(from, {
-                    text: `⚠️ *LINK DETECTED!*\n\n@${displayNumber}, links are *not allowed* here!\n\n🗑️ Your message has been deleted.\n\n⚠️ *Warning:* WhatsApp links will result in removal!`,
-                    mentions: [senderId]
-                });
-            }
-
-            return;
-        }
-
-        // ═══════════════════════════════════════════════════════════
-        // 🎯 MODE 3: STRICT MODE (Kick for ANY link)
-        // ═══════════════════════════════════════════════════════════
-        if (mode === 3) {
-            // Delete the message
-            try {
-                await conn.sendMessage(from, { delete: m.key });
-            } catch (delError) {
-                console.error("Failed to delete message:", delError);
-            }
-
-            // Send notification
-            let kickReason = hasWaLink ? "WhatsApp group/channel link" : "link";
-            
-            await conn.sendMessage(from, {
-                text: `🚨 *LINK DETECTED!* 🚨\n\n@${displayNumber} shared a *${kickReason}!*\n\n⛔ User has been *REMOVED* from this group!\n\n📋 *Mode:* Strict (No links allowed)`,
-                mentions: [senderId]
             });
 
-            // Get participant ID and kick
-            const { participantId } = await getParticipantId(conn, from, senderId);
-            
-            try {
-                await conn.groupParticipantsUpdate(from, [participantId], "remove");
-                console.log(`👢 User kicked (Mode 3 - Any Link): ${senderId}`);
-            } catch (kickError) {
-                console.error("Failed to kick user:", kickError);
-                await conn.sendMessage(from, {
-                    text: `❌ Failed to remove user. Please remove manually.`
-                });
+            // Log the reaction
+            console.log(`✅ Reacted to status from ${extractNumber(statusSender)} with ${emoji}`);
+
+            // Save to history
+            if (statusId) {
+                addReactedStatus(statusId, statusSender);
             }
 
-            return;
+        } catch (reactError) {
+            console.error("Failed to react to status:", reactError);
         }
 
     } catch (error) {
-        console.error("Anti-link detector error:", error);
+        console.error("Status detector error:", error);
     }
 });
+
+// ═══════════════════════════════════════════════════════════
+// 📡 ALTERNATIVE STATUS LISTENER (Add to your main file)
+// ═══════════════════════════════════════════════════════════
+// If the above doesn't work, add this 
