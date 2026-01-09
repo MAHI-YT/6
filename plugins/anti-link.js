@@ -1,109 +1,75 @@
-const { cmd } = require('../command');
 const axios = require('axios');
+const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
+const { cmd } = require('../command');
 const FormData = require('form-data');
 
 cmd({
     pattern: "toanime",
-    alias: ["anime", "animeme", "animefy"],
-    desc: "Convert photo to anime style",
-    category: "tools",
+    alias: ["anime", "animestyle", "animeart"],
     react: "🎨",
-    filename: __filename
+    desc: "Convert photo to anime style",
+    category: "image",
+    use: ".toanime (reply to image)",
+    filename: __filename,
 },
 async (conn, mek, m, { from, quoted, reply }) => {
     try {
-        // Check if user replied to an image or sent image with command
-        const isQuotedImage = quoted?.mimetype?.startsWith('image');
-        const isDirectImage = mek.message?.imageMessage;
-
-        if (!isQuotedImage && !isDirectImage) {
-            return await conn.sendMessage(from, { 
-                text: "❌ Please reply to an image or send an image with the command!\n\n*Example:* Reply to a photo with *.toanime*" 
-            }, { quoted: mek });
+        // Must reply to image
+        if (!quoted || !quoted.imageMessage) {
+            return reply("🖼️ Please reply to an image with `.toanime`");
         }
 
-        // React to show processing
-        await conn.sendMessage(from, { 
-            react: { text: "⏳", key: mek.key } 
-        });
+        await reply("⏳ Converting to anime style, please wait...");
 
-        await conn.sendMessage(from, { 
-            text: "🎨 Converting to anime style... Please wait!" 
-        }, { quoted: mek });
+        // Download image from WhatsApp
+        const stream = await downloadContentFromMessage(
+            quoted.imageMessage,
+            'image'
+        );
 
-        // Download the image
-        let buffer;
-        if (isQuotedImage) {
-            buffer = await quoted.download();
-        } else {
-            buffer = await conn.downloadMediaMessage(mek);
+        let buffer = Buffer.from([]);
+        for await (const chunk of stream) {
+            buffer = Buffer.concat([buffer, chunk]);
         }
 
-        if (!buffer) {
-            await conn.sendMessage(from, { 
-                react: { text: "❌", key: mek.key } 
-            });
-            return reply("❌ Failed to download image!");
-        }
-
-        // Create form data
-        const formData = new FormData();
-        formData.append('image', buffer, {
-            filename: 'image.jpg',
+        // Upload image to temporary hosting
+        const form = new FormData();
+        form.append('file', buffer, {
+            filename: 'toanime.jpg',
             contentType: 'image/jpeg'
         });
 
-        // Send to API
-        const response = await axios.post('https://api-faa.my.id/faa/toanime', formData, {
-            headers: {
-                ...formData.getHeaders()
+        const uploadRes = await axios.post(
+            'https://tmpfiles.org/api/v1/upload',
+            form,
+            { headers: form.getHeaders() }
+        );
+
+        const imageUrl = uploadRes.data.data.url.replace(
+            'tmpfiles.org/',
+            'tmpfiles.org/dl/'
+        );
+
+        // Call ToAnime API - Response is direct image
+        const apiUrl = `https://api-faa.my.id/faa/toanime?url=${encodeURIComponent(imageUrl)}`;
+
+        const apiRes = await axios.get(apiUrl, { 
+            timeout: 60000,
+            responseType: 'arraybuffer'
+        });
+
+        // Send anime style image
+        await conn.sendMessage(
+            from,
+            {
+                image: Buffer.from(apiRes.data),
+                caption: "> 🎨 Converted to Anime Style by DARKZONE-MD"
             },
-            responseType: 'arraybuffer',
-            timeout: 60000
-        });
+            { quoted: m }
+        );
 
-        // Check if response is an image
-        const contentType = response.headers['content-type'];
-        
-        if (contentType && contentType.includes('image')) {
-            // Send the anime image
-            await conn.sendMessage(from, {
-                image: Buffer.from(response.data),
-                caption: "🎨 *Anime Style Photo* ✨\n\n_Converted successfully!_"
-            }, { quoted: mek });
-
-            await conn.sendMessage(from, { 
-                react: { text: "✅", key: mek.key } 
-            });
-        } else {
-            // If response is JSON, try to get image URL
-            const jsonResponse = JSON.parse(Buffer.from(response.data).toString());
-            
-            if (jsonResponse.result || jsonResponse.url || jsonResponse.image) {
-                const imageUrl = jsonResponse.result || jsonResponse.url || jsonResponse.image;
-                
-                await conn.sendMessage(from, {
-                    image: { url: imageUrl },
-                    caption: "🎨 *Anime Style Photo* ✨\n\n_Converted successfully!_"
-                }, { quoted: mek });
-
-                await conn.sendMessage(from, { 
-                    react: { text: "✅", key: mek.key } 
-                });
-            } else {
-                throw new Error("Invalid API response");
-            }
-        }
-
-    } catch (e) {
-        console.error("ToAnime Error:", e);
-        
-        await conn.sendMessage(from, { 
-            react: { text: "❌", key: mek.key } 
-        });
-
-        await conn.sendMessage(from, { 
-            text: `❌ Failed to convert image!\n\nError: ${e.message}` 
-        }, { quoted: mek });
+    } catch (err) {
+        console.error("TOANIME ERROR:", err);
+        reply("❌ Anime conversion failed. Please try again.");
     }
 });
