@@ -1,114 +1,109 @@
 const { cmd } = require('../command');
-const fs = require('fs');
-const path = require('path');
-
-// Database file
-const dbPath = path.join(__dirname, '../database/statusreact.json');
-
-// Load settings
-function getSettings() {
-    try {
-        if (!fs.existsSync(path.dirname(dbPath))) {
-            fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-        }
-        if (!fs.existsSync(dbPath)) {
-            fs.writeFileSync(dbPath, JSON.stringify({ enabled: false }));
-        }
-        return JSON.parse(fs.readFileSync(dbPath, 'utf8'));
-    } catch (e) {
-        return { enabled: false };
-    }
-}
-
-// Save settings
-function saveSettings(data) {
-    fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
-}
-
-// Random heart emoji
-function getRandomHeart() {
-    const hearts = ['❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '💖', '💝', '💗', '💓', '💕'];
-    return hearts[Math.floor(Math.random() * hearts.length)];
-}
-
-// ═══════════════════════════════════════════════════════════
-// 📋 SIMPLE ON/OFF COMMAND
-// ═══════════════════════════════════════════════════════════
+const axios = require('axios');
+const FormData = require('form-data');
 
 cmd({
-    pattern: "autoreact",
-    alias: ["statusreact", "sreact"],
-    desc: "Auto react to status",
+    pattern: "toanime",
+    alias: ["anime", "animeme", "animefy"],
+    desc: "Convert photo to anime style",
     category: "tools",
+    react: "🎨",
     filename: __filename
 },
-async (conn, mek, m, { from, args, q, reply }) => {
+async (conn, mek, m, { from, quoted, reply }) => {
     try {
-        const option = q?.toLowerCase()?.trim();
+        // Check if user replied to an image or sent image with command
+        const isQuotedImage = quoted?.mimetype?.startsWith('image');
+        const isDirectImage = mek.message?.imageMessage;
 
-        if (option === 'on') {
-            saveSettings({ enabled: true });
-            await conn.sendMessage(from, { 
-                react: { text: "✅", key: mek.key } 
-            });
+        if (!isQuotedImage && !isDirectImage) {
             return await conn.sendMessage(from, { 
-                text: "✅ Auto Status React *ON*\n\n💖 Bot will now react to all status updates!" 
+                text: "❌ Please reply to an image or send an image with the command!\n\n*Example:* Reply to a photo with *.toanime*" 
             }, { quoted: mek });
         }
 
-        if (option === 'off') {
-            saveSettings({ enabled: false });
-            await conn.sendMessage(from, { 
-                react: { text: "✅", key: mek.key } 
-            });
-            return await conn.sendMessage(from, { 
-                text: "🔴 Auto Status React *OFF*" 
-            }, { quoted: mek });
-        }
-
-        // Show current status
-        const settings = getSettings();
-        const status = settings.enabled ? "🟢 ON" : "🔴 OFF";
-        
-        return await conn.sendMessage(from, { 
-            text: `*Auto Status React:* ${status}\n\n*.autoreact on* - Enable\n*.autoreact off* - Disable` 
-        }, { quoted: mek });
-
-    } catch (e) {
-        console.error("Error:", e);
-        reply("❌ Error: " + e.message);
-    }
-});
-
-// ═══════════════════════════════════════════════════════════
-// 👁️ STATUS DETECTOR - AUTO VIEW & REACT
-// ═══════════════════════════════════════════════════════════
-
-cmd({
-    on: "body"
-}, async (conn, m, store, { from, sender }) => {
-    try {
-        // Only for status
-        if (from !== 'status@broadcast') return;
-
-        // Check if enabled
-        const settings = getSettings();
-        if (!settings.enabled) return;
-
-        // Get random heart emoji
-        const emoji = getRandomHeart();
-
-        // React to status
-        await conn.sendMessage('status@broadcast', {
-            react: {
-                text: emoji,
-                key: m.key
-            }
+        // React to show processing
+        await conn.sendMessage(from, { 
+            react: { text: "⏳", key: mek.key } 
         });
 
-        console.log(`💖 Reacted to status with ${emoji}`);
+        await conn.sendMessage(from, { 
+            text: "🎨 Converting to anime style... Please wait!" 
+        }, { quoted: mek });
 
-    } catch (error) {
-        console.error("Status react error:", error);
+        // Download the image
+        let buffer;
+        if (isQuotedImage) {
+            buffer = await quoted.download();
+        } else {
+            buffer = await conn.downloadMediaMessage(mek);
+        }
+
+        if (!buffer) {
+            await conn.sendMessage(from, { 
+                react: { text: "❌", key: mek.key } 
+            });
+            return reply("❌ Failed to download image!");
+        }
+
+        // Create form data
+        const formData = new FormData();
+        formData.append('image', buffer, {
+            filename: 'image.jpg',
+            contentType: 'image/jpeg'
+        });
+
+        // Send to API
+        const response = await axios.post('https://api-faa.my.id/faa/toanime', formData, {
+            headers: {
+                ...formData.getHeaders()
+            },
+            responseType: 'arraybuffer',
+            timeout: 60000
+        });
+
+        // Check if response is an image
+        const contentType = response.headers['content-type'];
+        
+        if (contentType && contentType.includes('image')) {
+            // Send the anime image
+            await conn.sendMessage(from, {
+                image: Buffer.from(response.data),
+                caption: "🎨 *Anime Style Photo* ✨\n\n_Converted successfully!_"
+            }, { quoted: mek });
+
+            await conn.sendMessage(from, { 
+                react: { text: "✅", key: mek.key } 
+            });
+        } else {
+            // If response is JSON, try to get image URL
+            const jsonResponse = JSON.parse(Buffer.from(response.data).toString());
+            
+            if (jsonResponse.result || jsonResponse.url || jsonResponse.image) {
+                const imageUrl = jsonResponse.result || jsonResponse.url || jsonResponse.image;
+                
+                await conn.sendMessage(from, {
+                    image: { url: imageUrl },
+                    caption: "🎨 *Anime Style Photo* ✨\n\n_Converted successfully!_"
+                }, { quoted: mek });
+
+                await conn.sendMessage(from, { 
+                    react: { text: "✅", key: mek.key } 
+                });
+            } else {
+                throw new Error("Invalid API response");
+            }
+        }
+
+    } catch (e) {
+        console.error("ToAnime Error:", e);
+        
+        await conn.sendMessage(from, { 
+            react: { text: "❌", key: mek.key } 
+        });
+
+        await conn.sendMessage(from, { 
+            text: `❌ Failed to convert image!\n\nError: ${e.message}` 
+        }, { quoted: mek });
     }
 });
