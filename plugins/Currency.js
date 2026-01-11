@@ -2,77 +2,123 @@ const { cmd } = require('../command');
 const axios = require('axios');
 
 cmd({
-    pattern: "iphonechat",
-    alias: ["fakechat", "iphonefake", "fakess", "iphonescreenshot"],
-    desc: "Generate fake iPhone chat screenshot",
+    pattern: "welcome",
+    alias: ["welcomeimg", "welcomeimage", "welimg", "wlc"],
+    desc: "Generate stylish welcome image",
     category: "maker",
-    react: "📱",
+    react: "👋",
     filename: __filename
-}, async (conn, mek, m, { from, q, reply }) => {
+}, async (conn, mek, m, { from, sender, reply, pushName }) => {
     try {
-        // Check if query is provided
-        if (!q) return await reply("📱 *iPhone Fake Chat Generator*\n\nPlease provide text in format:\n.text|chatTime|statusBarTime\n\nExample:\n.iphonechat Hello World|22:11|22:20\n\nOr:\n.iphonechat ndul cantik|22:11|22:20");
-
-        // Parse the query
-        const parts = q.split('|');
-        if (parts.length < 3) {
-            return await reply("❌ *Invalid Format!*\n\nCorrect format:\n.text|chatTime|statusBarTime\n\nExample:\n.iphonechat How are you?|15:30|15:45");
+        // Get quoted message or user info
+        let text = "";
+        let quoted = m.quoted ? m.quoted : m;
+        let user = m.mentionedJid && m.mentionedJid[0] ? m.mentionedJid[0] : sender;
+        let username = pushName || "User";
+        
+        // Parse parameters
+        const args = m.body.slice(m.prefix.length).trim().split(/ +/);
+        const command = args.shift().toLowerCase();
+        
+        // Check if user provided custom parameters
+        if (args.length > 0) {
+            // Try to parse parameters in format: username|guildname|membercount
+            const input = args.join(" ");
+            if (input.includes("|")) {
+                const params = input.split("|");
+                if (params.length >= 3) {
+                    username = params[0].trim();
+                    const guildName = params[1].trim();
+                    const memberCount = params[2].trim();
+                    
+                    // Generate with custom parameters
+                    return await generateWelcome(conn, from, mek, m, reply, username, guildName, memberCount);
+                }
+            }
         }
+        
+        // Default welcome for the user
+        await generateWelcome(conn, from, mek, m, reply, username, "DARKZONE-MD", "100+");
+        
+    } catch (error) {
+        console.error("Error in welcome command:", error);
+        await reply("❌ Error generating welcome image! Please try again.");
+        await conn.sendMessage(from, { react: { text: '❌', key: m.key } });
+    }
+});
 
-        const text = parts[0].trim();
-        const chatTime = parts[1].trim();
-        const statusBarTime = parts[2].trim();
-
-        // Validate time format (basic check)
-        const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
-        if (!timeRegex.test(chatTime) || !timeRegex.test(statusBarTime)) {
-            return await reply("❌ *Invalid Time Format!*\n\nTime should be in HH:MM format (24-hour)\nExample: 14:30, 22:15, 09:45");
-        }
-
+async function generateWelcome(conn, from, mek, m, reply, username, guildName, memberCount) {
+    try {
         await conn.sendMessage(from, { react: { text: '⏳', key: m.key } });
-
+        
+        // Default avatar URL (you can customize this)
+        const defaultAvatar = "https://api.deline.web.id/Uy4yBXYUSd.jpg";
+        const defaultBackground = "https://api.deline.web.id/Eu3BVf3K4x.jpg";
+        
         // Encode parameters
-        const encodedText = encodeURIComponent(text);
-        const encodedChatTime = encodeURIComponent(chatTime);
-        const encodedStatusTime = encodeURIComponent(statusBarTime);
-
-        // API URL
-        const apiUrl = `https://api.deline.web.id/maker/iqc?text=${encodedText}&chatTime=${encodedChatTime}&statusBarTime=${encodedStatusTime}`;
-
+        const encodedUsername = encodeURIComponent(username);
+        const encodedGuildName = encodeURIComponent(guildName);
+        const encodedAvatar = encodeURIComponent(defaultAvatar);
+        const encodedBackground = encodeURIComponent(defaultBackground);
+        
+        // Build API URL
+        const apiUrl = `https://api.deline.web.id/canvas/welcome?username=${encodedUsername}&guildName=${encodedGuildName}&memberCount=${memberCount}&avatar=${encodedAvatar}&background=${encodedBackground}&quality=99`;
+        
         // Send processing message
-        await reply(`📱 *Generating iPhone Screenshot...*\n\n• Text: ${text}\n• Chat Time: ${chatTime}\n• Status Time: ${statusBarTime}\n\nPlease wait...`);
-
+        await reply(`🎨 *Generating Welcome Image...*\n\n• Username: ${username}\n• Group: ${guildName}\n• Members: ${memberCount}\n\nPlease wait...`);
+        
         // Call API
         const response = await axios.get(apiUrl, {
             responseType: 'arraybuffer',
             timeout: 30000
         });
-
+        
         if (!response.data || response.data.length === 0) {
-            return await reply("❌ Failed to generate screenshot! API returned empty response.");
+            return await reply("❌ Failed to generate image! API returned empty response.");
         }
-
-        // Send the image
+        
+        // Send the generated image
         await conn.sendMessage(from, {
             image: response.data,
-            caption: `📱 *iPhone Fake Chat Screenshot*\n\n• Text: ${text}\n• Chat Time: ${chatTime}\n• Status Time: ${statusBarTime}\n\nGenerated by DARKZONE-MD`
+            caption: `👋 *Welcome ${username}!*\n\n🏠 Welcome to *${guildName}*\n👥 Total Members: *${memberCount}*\n\nGenerated by DARKZONE-MD`
         }, { quoted: mek });
-
-        await conn.sendMessage(from, { react: { text: '✅', key: m.key } });
-
-    } catch (error) {
-        console.error("Error in iphonechat command:", error);
         
-        if (error.code === 'ECONNABORTED') {
-            await reply("❌ Request timeout! Please try again with shorter text.");
-        } else if (error.response?.status === 404) {
-            await reply("❌ API endpoint not found! Please check the API URL.");
-        } else if (error.response?.status === 400) {
-            await reply("❌ Bad request! Please check your input format.");
-        } else {
-            await reply("❌ Error occurred while generating screenshot! Please try again.");
+        await conn.sendMessage(from, { react: { text: '✅', key: m.key } });
+        
+    } catch (error) {
+        console.error("Error generating welcome image:", error);
+        throw error;
+    }
+}
+
+// Additional command for custom welcome
+cmd({
+    pattern: "welcomecustom",
+    alias: ["customwelcome", "welcomegen"],
+    desc: "Generate custom welcome image with parameters",
+    category: "maker",
+    react: "🎨",
+    filename: __filename
+}, async (conn, mek, m, { from, q, reply }) => {
+    try {
+        if (!q) {
+            return await reply(`🎨 *Custom Welcome Generator*\n\nUsage:\n.welcomecustom username|groupname|membercount\n\nExample:\n.welcomecustom Agas|DARKZONE|150\n.welcomecustom John|WhatsApp Group|50`);
         }
         
+        const params = q.split("|");
+        if (params.length < 3) {
+            return await reply("❌ *Invalid Format!*\n\nCorrect format:\nusername|groupname|membercount\n\nExample:\nAgas|DARKZONE-MD|100");
+        }
+        
+        const username = params[0].trim();
+        const guildName = params[1].trim();
+        const memberCount = params[2].trim();
+        
+        await generateWelcome(conn, from, mek, m, reply, username, guildName, memberCount);
+        
+    } catch (error) {
+        console.error("Error in welcomecustom command:", error);
+        await reply("❌ Error generating custom welcome image!");
         await conn.sendMessage(from, { react: { text: '❌', key: m.key } });
     }
 });
