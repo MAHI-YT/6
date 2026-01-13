@@ -7,7 +7,7 @@ const { setCommitHash, getCommitHash } = require('../data/updateDB');
 
 cmd({
     pattern: "update",
-    alias: ["upgrade", "sync"],
+    alias: ["upgrade", "roohi"],
     react: '🆕',
     desc: "Update the bot to the latest version.",
     category: "misc",
