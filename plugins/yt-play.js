@@ -12,7 +12,7 @@ cmd({
     try {
         if (!q) return await reply("🎧 Please provide a song name!\n\nExample: .music Faded Alan Walker");
 
-        await reply("");
+        
 
         const api = `https://api.deline.web.id/downloader/ytplay?q=${encodeURIComponent(q)}`;
         const res = await axios.get(api, { timeout: 60000 });
