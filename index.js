@@ -208,7 +208,7 @@ async function connectToWA() {
         }
 
         if (qr) {
-            console.log('[🔰] Scan the QR code to connect or use session ID');
+            console.log('[🔰]Scan the QR code to connect or use session ID');
         }
     });
 
@@ -227,127 +227,90 @@ async function connectToWA() {
 
 //=========WELCOME & GOODBYE (FIXED with LID Support) =======
 	
-conn.ev.on('group-participants.update', async (update) => {
+//========= WORKING WELCOME, GOODBYE & ADMIN EVENTS (2025) =========
+conn.ev.on('group-participants.update', async (anu) => {
     try {
+        const { id, participants, action } = anu;
+        
+        // Ignore if welcome is disabled in config
         if (config.WELCOME !== "true") return;
 
-        const metadata = await conn.groupMetadata(update.id);
+        const metadata = await conn.groupMetadata(id);
         const groupName = metadata.subject;
-        const groupSize = metadata.participants.length;
-        const timestamp = new Date().toLocaleString();
+        const groupMembersCount = metadata.participants.length;
 
-        for (let user of update.participants) {
-            const userName = user.split('@')[0];
-            let pfp;
-
+        for (let num of participants) {
+            let profilePic;
             try {
-                pfp = await conn.profilePictureUrl(user, 'image');
-            } catch (err) {
-                pfp = config.MENU_IMAGE_URL || "https://files.catbox.moe/jecbfo.jpg";
+                profilePic = await conn.profilePictureUrl(num, 'image');
+            } catch {
+                profilePic = 'https://files.catbox.moe/jecbfo.jpg'; // fallback image
             }
 
-            // WELCOME HANDLER
-            if (update.action === 'add') {
-                const welcomeMsg = `*╭ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄──*
-*│  ̇─̣─̇─̣〘 ωєℓ¢σмє 〙̣─̇─̣─̇*
-*├┅┅┅┅┈┈┈┈┈┈┈┈┈┅┅┅◆*
-*│❀ нєу* @${userName}!
-*│❀ gʀσᴜᴘ* ${groupName}
-*├┅┅┅┅┈┈┈┈┈┈┈┈┈┅┅┅◆*
-*│● ѕтαу ѕαfє αɴ∂ fσℓℓσω*
-*│● тнє gʀσυᴘѕ ʀᴜℓєѕ!*
-*│● ᴊсиɴє∂ ${groupSize}*
-*│● ©ᴘσωєʀє∂ ву ${config.BOT_NAME}*
-*╰┉┉┉┉┈┈┈┈┈┈┈┈┉┉┉᛫᛭*`;
+            const userNumber = num.split('@')[0];
 
-                await conn.sendMessage(update.id, {
-                    image: { url: pfp },
-                    caption: welcomeMsg,
-                    mentions: [user],
-                    contextInfo: {
-                        forwardingScore: 999,
-                        isForwarded: true,
-                        mentionedJid: [user],
-                        forwardedNewsletterMessageInfo: {
-                            newsletterName: config.BOT_NAME,
-                            newsletterJid: "120363416743041101@newsletter",
-                        },
-                    }
+            // ─────────────── WELCOME MESSAGE ───────────────
+            if (action === 'add') {
+                const welcomeText = `*╭━━━━━━━━━━━━━━━━━╮*
+*┃  〘 WELCOME 〙*
+*┣━━━━━━━━━━━━━━━━━╯*
+*┃ ✿ ʜᴇʏ @${userNumber}*
+*┃ ✿ ᴡᴇʟᴄᴏᴍᴇ ᴛᴏ*
+*┃ ➥ ${groupName}*
+*┃ ✿ ᴍᴇᴍʙᴇʀs: ${groupMembersCount}th*
+*┃ ✿ ᴘʟᴇᴀsᴇ ғᴏʟʟᴏᴡ ɢʀᴏᴜᴘ ʀᴜʟᴇs*
+*┃ ✿ ᴘᴏᴡᴇʀᴇᴅ ʙʏ ${config.BOT_NAME || 'DARKZONE-MD'}*
+*╰━━━━━━━━━━━━━━━━━╯*`;
+
+                await conn.sendMessage(id, {
+                    image: { url: profilePic },
+                    caption: welcomeText,
+                    mentions: [num]
                 });
             }
 
-            // GOODBYE HANDLER
-            if (update.action === 'remove') {
-                const goodbyeMsg = `*╭ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄──*
-*│  ̇─̣─̇─̣〘 gσσ∂вує 〙̣─̇─̣─̇*
-*├┅┅┅┅┈┈┈┈┈┈┈┈┈┅┅┅◆*
-*│❀ ᴜѕєʀ* @${userName}
-*│● мємвєʀѕ ιѕ ℓєfт тнє gʀσᴜᴘ*
-*│● мємвєʀs ${groupSize}*
-*│● ©ᴘσωєʀє∂ ву ${config.BOT_NAME}*
-*╰┉┉┉┉┈┈┈┈┈┈┈┈┉┉┉᛫᛭*`;
+            // ─────────────── GOODBYE MESSAGE ───────────────
+            else if (action === 'remove') {
+                const goodbyeText = `*╭━━━━━━━━━━━━━━━━━╮*
+*┃  〘 GOODBYE 〙*
+*┣━━━━━━━━━━━━━━━━━╯*
+*┃ ✿ ᴜsᴇʀ: @${userNumber}*
+*┃ ✿ ʟᴇғᴛ ᴛʜᴇ ɢʀᴏᴜᴘ*
+*┃ ✿ ɴᴏᴡ ᴍᴇᴍʙᴇʀs: ${groupMembersCount}*
+*┃ ✿ ᴡᴇ ᴡɪʟʟ ᴍɪss ʏᴏᴜ*
+*┃ ✿ ᴘᴏᴡᴇʀᴇᴅ ʙʏ ${config.BOT_NAME || 'DARKZONE-MD'}*
+*╰━━━━━━━━━━━━━━━━━╯*`;
 
-                await conn.sendMessage(update.id, {
-                    image: { url: config.MENU_IMAGE_URL || "https://files.catbox.moe/jecbfo.jpg" },
-                    caption: goodbyeMsg,
-                    mentions: [user],
-                    contextInfo: {
-                        forwardingScore: 999,
-                        isForwarded: true,
-                        mentionedJid: [user],
-                        forwardedNewsletterMessageInfo: {
-                            newsletterName: config.BOT_NAME,
-                            newsletterJid: "120363416743041101@newsletter",
-                        },
-                    }
+                await conn.sendMessage(id, {
+                    image: { url: 'https://files.catbox.moe/jecbfo.jpg' },
+                    caption: goodbyeText,
+                    mentions: [num]
                 });
             }
 
-            // ADMIN PROMOTE/DEMOTE HANDLER
-            if (update.action === "promote" && config.ADMIN_ACTION === "true") {
-                const promoter = update.author.split("@")[0];
-                await conn.sendMessage(update.id, {
-                    text: `╭─〔 *🎉 Admin Event* 〕\n` +
-                          `├─ @${promoter} promoted @${userName}\n` +
-                          `├─ *Time:* ${timestamp}\n` +
-                          `├─ *Group:* ${metadata.subject}\n` +
-                          `╰─➤ *Powered by ${config.BOT_NAME}*`,
-                    mentions: [update.author, user],
-                    contextInfo: {
-                        forwardingScore: 999,
-                        isForwarded: true,
-                        mentionedJid: [update.author, user],
-                        forwardedNewsletterMessageInfo: {
-                            newsletterName: config.BOT_NAME,
-                            newsletterJid: "120363416743041101@newsletter",
-                        },
-                    }
+            // ─────────────── PROMOTE MESSAGE ───────────────
+            else if (action === 'promote' && config.ADMIN_ACTION === "true") {
+                const promoter = anu.author ? anu.author.split('@')[0] : 'Someone';
+                await conn.sendMessage(id, {
+                    text: `*@${promoter} ᴘʀᴏᴍᴏᴛᴇᴅ @${userNumber} ᴛᴏ ᴀᴅᴍɪɴ*`,
+                    mentions: [anu.author || '', num]
                 });
-            } else if (update.action === "demote" && config.ADMIN_ACTION === "true") {
-                const demoter = update.author.split("@")[0];
-                await conn.sendMessage(update.id, {
-                    text: `╭─〔 *⚠️ Admin Event* 〕\n` +
-                          `├─ @${demoter} demoted @${userName}\n` +
-                          `├─ *Time:* ${timestamp}\n` +
-                          `├─ *Group:* ${metadata.subject}\n` +
-                          `╰─➤ *Powered by ${config.BOT_NAME}*`,
-                    mentions: [update.author, user],
-                    contextInfo: {
-                        forwardingScore: 999,
-                        isForwarded: true,
-                        mentionedJid: [update.author, user],
-                        forwardedNewsletterMessageInfo: {
-                            newsletterName: config.BOT_NAME,
-                            newsletterJid: "120363416743041101@newsletter",
-                        },
-                    }
+            }
+
+            // ─────────────── DEMOTE MESSAGE ───────────────
+            else if (action === 'demote' && config.ADMIN_ACTION === "true") {
+                const demoter = anu.author ? anu.author.split('@')[0] : 'Someone';
+                await conn.sendMessage(id, {
+                    text: `*@${demoter} ʀᴇᴍᴏᴠᴇᴅ ᴀᴅᴍɪɴ ʀɪɢʜᴛs ғʀᴏᴍ @${userNumber}*`,
+                    mentions: [anu.author || '', num]
                 });
             }
         }
     } catch (err) {
-        console.error("❌ Error in welcome/goodbye message:", err);
+        console.log('Welcome/Goodbye Error:', err);
     }
 });
+                    
 
 // always Online 
 
