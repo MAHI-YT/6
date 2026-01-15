@@ -1,4 +1,3 @@
-
 const axios = require('axios')
 const config = require('./config')
 const {
@@ -189,7 +188,7 @@ async function connectToWA() {
                 await new Promise(resolve => setTimeout(resolve, 2000));
                     
                 await conn.sendMessage(botJid, { 
-                    image: { url: config.MENU_IMAGE_URL || 'https://honest-emerald-4wx4dg9grd.edgeone.app/IMG-20251213-WA0013.jpg' }, 
+                    image: { url: config.MENU_IMAGE_URL || 'https://ibb.co/xt6c1hw1' }, 
                     caption: upMessage,
                     contextInfo: {
                         forwardingScore: 999,
@@ -208,7 +207,7 @@ async function connectToWA() {
         }
 
         if (qr) {
-            console.log('[🔰]Scan the QR code to connect or use session ID');
+            console.log('[🔰] Scan the QR code to connect or use session ID');
         }
     });
 
@@ -225,139 +224,139 @@ async function connectToWA() {
     }
   });
 
-//=========WELCOME & GOODBYE (FIXED with LID Support) =======
-	
+//=========WELCOME & GOODBYE & ADMIN EVENTS (FIXED) =======
 
-// Find this section in your code (around line where other conn.ev.on are):
-
-conn.ev.on("presence.update", (update) => PresenceControl(conn, update));
-
-BotActivityFilter(conn);
-
-// ⬇️ ADD THE WELCOME/GOODBYE CODE RIGHT HERE ⬇️
-
-//=========WELCOME & GOODBYE (FIXED) =======
 conn.ev.on('group-participants.update', async (update) => {
     try {
-        if (config.WELCOME !== "true") return;
-
-        const metadata = await conn.groupMetadata(update.id);
+        const groupId = update.id;
+        const action = update.action;
+        const participants = update.participants;
+        const author = update.author;
+        
+        const metadata = await conn.groupMetadata(groupId);
         const groupName = metadata.subject;
         const groupSize = metadata.participants.length;
         const timestamp = new Date().toLocaleString();
 
-        for (let user of update.participants) {
-            // Handle LID format (linked device IDs)
+        for (let participant of participants) {
+            
+            // Get display number (handle LID format)
             let displayNumber;
-            if (user.includes(':')) {
-                // LID format: extract the number before ':'
-                displayNumber = user.split(':')[0];
+            if (participant.includes(':')) {
+                displayNumber = participant.split(':')[0];
             } else {
-                displayNumber = user.split('@')[0];
+                displayNumber = participant.split('@')[0];
             }
             
+            // Get profile picture
             let pfp;
             try {
-                pfp = await conn.profilePictureUrl(user, 'image');
+                pfp = await conn.profilePictureUrl(participant, 'image');
             } catch (err) {
                 pfp = config.MENU_IMAGE_URL || "https://files.catbox.moe/jecbfo.jpg";
             }
 
-            // WELCOME HANDLER
-            if (update.action === 'add') {
+            // ========== WELCOME - New Member Joined ==========
+            if (action === 'add' && config.WELCOME === "true") {
                 const welcomeMsg = `*╭ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄──*
 *│  ̇─̣─̇─̣〘 ωєℓ¢σмє 〙̣─̇─̣─̇*
 *├┅┅┅┅┈┈┈┈┈┈┈┈┈┅┅┅◆*
 *│❀ нєу* @${displayNumber}!
-*│❀ gʀσᴜᴘ* ${groupName}
+*│❀ gʀσᴜᴘ:* ${groupName}
 *├┅┅┅┅┈┈┈┈┈┈┈┈┈┅┅┅◆*
 *│● ѕтαу ѕαfє αɴ∂ fσℓℓσω*
 *│● тнє gʀσυᴘѕ ʀᴜℓєѕ!*
-*│● мємвєʀѕ: ${groupSize}*
+*│● мємвєʀѕ:* ${groupSize}
 *│● ©ᴘσωєʀє∂ ву ${config.BOT_NAME}*
 *╰┉┉┉┉┈┈┈┈┈┈┈┈┉┉┉᛫᛭*`;
 
-                await conn.sendMessage(update.id, {
+                await conn.sendMessage(groupId, {
                     image: { url: pfp },
                     caption: welcomeMsg,
-                    mentions: [user],
-                    contextInfo: {
-                        forwardingScore: 999,
-                        isForwarded: true,
-                        mentionedJid: [user],
-                        forwardedNewsletterMessageInfo: {
-                            newsletterName: config.BOT_NAME,
-                            newsletterJid: "120363416743041101@newsletter",
-                        },
-                    }
+                    mentions: [participant]
                 });
                 console.log(`[✅] Welcome message sent for: ${displayNumber}`);
             }
 
-            // GOODBYE HANDLER
-            if (update.action === 'remove') {
+            // ========== GOODBYE - Member Left ==========
+            if (action === 'remove' && config.WELCOME === "true") {
                 const goodbyeMsg = `*╭ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄──*
 *│  ̇─̣─̇─̣〘 gσσ∂вує 〙̣─̇─̣─̇*
 *├┅┅┅┅┈┈┈┈┈┈┈┈┈┅┅┅◆*
-*│❀ ᴜѕєʀ* @${displayNumber}
+*│❀ ᴜѕєʀ:* @${displayNumber}
 *│● мємвєʀ ℓєfт тнє gʀσᴜᴘ*
-*│● мємвєʀs: ${groupSize}*
+*│● мємвєʀѕ:* ${groupSize}
 *│● ©ᴘσωєʀє∂ ву ${config.BOT_NAME}*
 *╰┉┉┉┉┈┈┈┈┈┈┈┈┉┉┉᛫᛭*`;
 
-                await conn.sendMessage(update.id, {
+                await conn.sendMessage(groupId, {
                     image: { url: config.MENU_IMAGE_URL || "https://files.catbox.moe/jecbfo.jpg" },
                     caption: goodbyeMsg,
-                    mentions: [user],
-                    contextInfo: {
-                        forwardingScore: 999,
-                        isForwarded: true,
-                        mentionedJid: [user],
-                        forwardedNewsletterMessageInfo: {
-                            newsletterName: config.BOT_NAME,
-                            newsletterJid: "120363416743041101@newsletter",
-                        },
-                    }
+                    mentions: [participant]
                 });
                 console.log(`[✅] Goodbye message sent for: ${displayNumber}`);
             }
 
-            // ADMIN PROMOTE HANDLER
-            if (update.action === "promote" && config.ADMIN_ACTION === "true") {
-                const promoter = update.author ? update.author.split("@")[0].split(":")[0] : "Unknown";
-                await conn.sendMessage(update.id, {
-                    text: `╭─〔 *🎉 Admin Event* 〕\n` +
-                          `├─ @${promoter} promoted @${displayNumber}\n` +
-                          `├─ *Time:* ${timestamp}\n` +
-                          `├─ *Group:* ${groupName}\n` +
-                          `╰─➤ *Powered by ${config.BOT_NAME}*`,
-                    mentions: [update.author, user],
+            // ========== PROMOTE - Someone Made Admin ==========
+            if (action === 'promote' && config.ADMIN_ACTION === "true") {
+                let promoterNumber;
+                if (author && author.includes(':')) {
+                    promoterNumber = author.split(':')[0];
+                } else if (author) {
+                    promoterNumber = author.split('@')[0];
+                } else {
+                    promoterNumber = "Unknown";
+                }
+
+                const promoteMsg = `╭─〔 *🎉 ADMIN PROMOTED* 〕─╮
+│
+│ 👑 *New Admin:* @${displayNumber}
+│ 🔧 *Promoted By:* @${promoterNumber}
+│ 📅 *Time:* ${timestamp}
+│ 👥 *Group:* ${groupName}
+│
+╰─➤ *Powered by ${config.BOT_NAME}*`;
+
+                await conn.sendMessage(groupId, {
+                    text: promoteMsg,
+                    mentions: [participant, author]
                 });
-                console.log(`[✅] Promote event sent`);
+                console.log(`[✅] Promote event: ${promoterNumber} promoted ${displayNumber}`);
             }
 
-            // ADMIN DEMOTE HANDLER
-            if (update.action === "demote" && config.ADMIN_ACTION === "true") {
-                const demoter = update.author ? update.author.split("@")[0].split(":")[0] : "Unknown";
-                await conn.sendMessage(update.id, {
-                    text: `╭─〔 *⚠️ Admin Event* 〕\n` +
-                          `├─ @${demoter} demoted @${displayNumber}\n` +
-                          `├─ *Time:* ${timestamp}\n` +
-                          `├─ *Group:* ${groupName}\n` +
-                          `╰─➤ *Powered by ${config.BOT_NAME}*`,
-                    mentions: [update.author, user],
+            // ========== DEMOTE - Someone Removed From Admin ==========
+            if (action === 'demote' && config.ADMIN_ACTION === "true") {
+                let demoterNumber;
+                if (author && author.includes(':')) {
+                    demoterNumber = author.split(':')[0];
+                } else if (author) {
+                    demoterNumber = author.split('@')[0];
+                } else {
+                    demoterNumber = "Unknown";
+                }
+
+                const demoteMsg = `╭─〔 *⚠️ ADMIN DEMOTED* 〕─╮
+│
+│ 👤 *Demoted User:* @${displayNumber}
+│ 🔧 *Demoted By:* @${demoterNumber}
+│ 📅 *Time:* ${timestamp}
+│ 👥 *Group:* ${groupName}
+│
+╰─➤ *Powered by ${config.BOT_NAME}*`;
+
+                await conn.sendMessage(groupId, {
+                    text: demoteMsg,
+                    mentions: [participant, author]
                 });
-                console.log(`[✅] Demote event sent`);
+                console.log(`[✅] Demote event: ${demoterNumber} demoted ${displayNumber}`);
             }
         }
     } catch (err) {
-        console.error("❌ Error in welcome/goodbye message:", err);
+        console.error("❌ Error in group-participants.update:", err);
     }
 });
 
-// ⬇️ Then continue with the messages.upsert event...
-conn.ev.on('messages.upsert', async(mek) => {
-                
+//========= END WELCOME & GOODBYE & ADMIN EVENTS =======
 
 // always Online 
 
