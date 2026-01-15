@@ -226,8 +226,128 @@ async function connectToWA() {
   });
 
 //=========WELCOME & GOODBYE (FIXED with LID Support) =======
+	
+conn.ev.on('group-participants.update', async (update) => {
+    try {
+        if (config.WELCOME !== "true") return;
 
+        const metadata = await conn.groupMetadata(update.id);
+        const groupName = metadata.subject;
+        const groupSize = metadata.participants.length;
+        const timestamp = new Date().toLocaleString();
 
+        for (let user of update.participants) {
+            const userName = user.split('@')[0];
+            let pfp;
+
+            try {
+                pfp = await conn.profilePictureUrl(user, 'image');
+            } catch (err) {
+                pfp = config.MENU_IMAGE_URL || "https://files.catbox.moe/jecbfo.jpg";
+            }
+
+            // WELCOME HANDLER
+            if (update.action === 'add') {
+                const welcomeMsg = `*╭ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄──*
+*│  ̇─̣─̇─̣〘 ωєℓ¢σмє 〙̣─̇─̣─̇*
+*├┅┅┅┅┈┈┈┈┈┈┈┈┈┅┅┅◆*
+*│❀ нєу* @${userName}!
+*│❀ gʀσᴜᴘ* ${groupName}
+*├┅┅┅┅┈┈┈┈┈┈┈┈┈┅┅┅◆*
+*│● ѕтαу ѕαfє αɴ∂ fσℓℓσω*
+*│● тнє gʀσυᴘѕ ʀᴜℓєѕ!*
+*│● ᴊсиɴє∂ ${groupSize}*
+*│● ©ᴘσωєʀє∂ ву ${config.BOT_NAME}*
+*╰┉┉┉┉┈┈┈┈┈┈┈┈┉┉┉᛫᛭*`;
+
+                await conn.sendMessage(update.id, {
+                    image: { url: pfp },
+                    caption: welcomeMsg,
+                    mentions: [user],
+                    contextInfo: {
+                        forwardingScore: 999,
+                        isForwarded: true,
+                        mentionedJid: [user],
+                        forwardedNewsletterMessageInfo: {
+                            newsletterName: config.BOT_NAME,
+                            newsletterJid: "120363416743041101@newsletter",
+                        },
+                    }
+                });
+            }
+
+            // GOODBYE HANDLER
+            if (update.action === 'remove') {
+                const goodbyeMsg = `*╭ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄──*
+*│  ̇─̣─̇─̣〘 gσσ∂вує 〙̣─̇─̣─̇*
+*├┅┅┅┅┈┈┈┈┈┈┈┈┈┅┅┅◆*
+*│❀ ᴜѕєʀ* @${userName}
+*│● мємвєʀѕ ιѕ ℓєfт тнє gʀσᴜᴘ*
+*│● мємвєʀs ${groupSize}*
+*│● ©ᴘσωєʀє∂ ву ${config.BOT_NAME}*
+*╰┉┉┉┉┈┈┈┈┈┈┈┈┉┉┉᛫᛭*`;
+
+                await conn.sendMessage(update.id, {
+                    image: { url: config.MENU_IMAGE_URL || "https://files.catbox.moe/jecbfo.jpg" },
+                    caption: goodbyeMsg,
+                    mentions: [user],
+                    contextInfo: {
+                        forwardingScore: 999,
+                        isForwarded: true,
+                        mentionedJid: [user],
+                        forwardedNewsletterMessageInfo: {
+                            newsletterName: config.BOT_NAME,
+                            newsletterJid: "120363416743041101@newsletter",
+                        },
+                    }
+                });
+            }
+
+            // ADMIN PROMOTE/DEMOTE HANDLER
+            if (update.action === "promote" && config.ADMIN_ACTION === "true") {
+                const promoter = update.author.split("@")[0];
+                await conn.sendMessage(update.id, {
+                    text: `╭─〔 *🎉 Admin Event* 〕\n` +
+                          `├─ @${promoter} promoted @${userName}\n` +
+                          `├─ *Time:* ${timestamp}\n` +
+                          `├─ *Group:* ${metadata.subject}\n` +
+                          `╰─➤ *Powered by ${config.BOT_NAME}*`,
+                    mentions: [update.author, user],
+                    contextInfo: {
+                        forwardingScore: 999,
+                        isForwarded: true,
+                        mentionedJid: [update.author, user],
+                        forwardedNewsletterMessageInfo: {
+                            newsletterName: config.BOT_NAME,
+                            newsletterJid: "120363416743041101@newsletter",
+                        },
+                    }
+                });
+            } else if (update.action === "demote" && config.ADMIN_ACTION === "true") {
+                const demoter = update.author.split("@")[0];
+                await conn.sendMessage(update.id, {
+                    text: `╭─〔 *⚠️ Admin Event* 〕\n` +
+                          `├─ @${demoter} demoted @${userName}\n` +
+                          `├─ *Time:* ${timestamp}\n` +
+                          `├─ *Group:* ${metadata.subject}\n` +
+                          `╰─➤ *Powered by ${config.BOT_NAME}*`,
+                    mentions: [update.author, user],
+                    contextInfo: {
+                        forwardingScore: 999,
+                        isForwarded: true,
+                        mentionedJid: [update.author, user],
+                        forwardedNewsletterMessageInfo: {
+                            newsletterName: config.BOT_NAME,
+                            newsletterJid: "120363416743041101@newsletter",
+                        },
+                    }
+                });
+            }
+        }
+    } catch (err) {
+        console.error("❌ Error in welcome/goodbye message:", err);
+    }
+});
 
 // always Online 
 
