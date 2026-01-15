@@ -227,34 +227,7 @@ async function connectToWA() {
 
 //=========WELCOME & GOODBYE (FIXED with LID Support) =======
 
-} else if (connection === 'open') {
-    console.log('[🔰] DARKZONE-MD connected to WhatsApp ✅');
-    
-    // Load plugins
-    const pluginPath = path.join(__dirname, 'plugins');
-    let pluginCount = 0;
-    fs.readdirSync(pluginPath).forEach((plugin) => {
-        if (path.extname(plugin).toLowerCase() === ".js") {
-            require(path.join(pluginPath, plugin));
-            pluginCount++;
-        }
-    });
-    console.log('[🔰] Plugins installed successfully ✅');
 
-    // ⬇️ ADD THIS SECTION ⬇️
-    // Initialize Welcome/Goodbye Handler
-    try {
-        const { initWelcomeGoodbye } = require('./plugins/welcome');
-        initWelcomeGoodbye(conn);
-    } catch (err) {
-        console.error('[❌] Error loading welcome handler:', err);
-    }
-    // ⬆️ ADD THIS SECTION ⬆️
-
-    // ============ CONNECTION MESSAGE ============
-    try {
-        const botJid = conn.user.id.split(':')[0] + '@s.whatsapp.net';
-        // ... rest of your code
 
 // always Online 
 
