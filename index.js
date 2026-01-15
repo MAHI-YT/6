@@ -227,90 +227,89 @@ async function connectToWA() {
 
 //=========WELCOME & GOODBYE (FIXED with LID Support) =======
 	
-//========= WORKING WELCOME, GOODBYE & ADMIN EVENTS (2025) =========
-conn.ev.on('group-participants.update', async (anu) => {
+// ✅ FULLY WORKING WELCOME, GOODBYE & ADMIN ACTION DETECTOR
+conn.ev.on('group-participants.update', async (update) => {
     try {
-        const { id, participants, action } = anu;
-        
-        // Ignore if welcome is disabled in config
+        // Skip entirely if welcome system is disabled in config
         if (config.WELCOME !== "true") return;
 
-        const metadata = await conn.groupMetadata(id);
-        const groupName = metadata.subject;
-        const groupMembersCount = metadata.participants.length;
+        // Fetch full group metadata to get group name and member count
+        const groupMeta = await conn.groupMetadata(update.id).catch(() => null);
+        if (!groupMeta) return;
 
-        for (let num of participants) {
-            let profilePic;
+        const groupName = groupMeta.subject;
+        const totalGroupMembers = groupMeta.participants.length;
+
+        // Loop through all affected users
+        for (const userJid of update.participants) {
+            const userNumber = userJid.split('@')[0];
+            let userProfilePic;
+
+            // Get user's profile picture or use fallback image
             try {
-                profilePic = await conn.profilePictureUrl(num, 'image');
+                userProfilePic = await conn.profilePictureUrl(userJid, 'image');
             } catch {
-                profilePic = 'https://files.catbox.moe/jecbfo.jpg'; // fallback image
+                userProfilePic = config.MENU_IMAGE_URL || "https://files.catbox.moe/jecbfo.jpg";
             }
 
-            const userNumber = num.split('@')[0];
+            // 🎉 HANDLE NEW MEMBERS JOINING
+            if (update.action === 'add') {
+                const welcomeMessage = `╭━━━━━━━━━━━━━━━━━━━╮
+┃  🎉 WELCOME TO ${groupName.toUpperCase()}
+┃━━━━━━━━━━━━━━━━━━━━
+┃ ✅ Hello @${userNumber}!
+┃ 📜 Please follow all group rules
+┃ 👥 Total Members: ${totalGroupMembers}
+╰━━━━━━━━━━━━━━━━━━━╯
+*Powered by \({config.BOT_NAME}*`;
 
-            // ─────────────── WELCOME MESSAGE ───────────────
-            if (action === 'add') {
-                const welcomeText = `*╭━━━━━━━━━━━━━━━━━╮*
-*┃  〘 WELCOME 〙*
-*┣━━━━━━━━━━━━━━━━━╯*
-*┃ ✿ ʜᴇʏ @${userNumber}*
-*┃ ✿ ᴡᴇʟᴄᴏᴍᴇ ᴛᴏ*
-*┃ ➥ ${groupName}*
-*┃ ✿ ᴍᴇᴍʙᴇʀs: ${groupMembersCount}th*
-*┃ ✿ ᴘʟᴇᴀsᴇ ғᴏʟʟᴏᴡ ɢʀᴏᴜᴘ ʀᴜʟᴇs*
-*┃ ✿ ᴘᴏᴡᴇʀᴇᴅ ʙʏ ${config.BOT_NAME || 'DARKZONE-MD'}*
-*╰━━━━━━━━━━━━━━━━━╯*`;
-
-                await conn.sendMessage(id, {
-                    image: { url: profilePic },
-                    caption: welcomeText,
-                    mentions: [num]
+                await conn.sendMessage(update.id, {
+                    image: { url: userProfilePic },
+                    caption: welcomeMessage,
+                    mentions: [userJid]
                 });
             }
 
-            // ─────────────── GOODBYE MESSAGE ───────────────
-            else if (action === 'remove') {
-                const goodbyeText = `*╭━━━━━━━━━━━━━━━━━╮*
-*┃  〘 GOODBYE 〙*
-*┣━━━━━━━━━━━━━━━━━╯*
-*┃ ✿ ᴜsᴇʀ: @${userNumber}*
-*┃ ✿ ʟᴇғᴛ ᴛʜᴇ ɢʀᴏᴜᴘ*
-*┃ ✿ ɴᴏᴡ ᴍᴇᴍʙᴇʀs: ${groupMembersCount}*
-*┃ ✿ ᴡᴇ ᴡɪʟʟ ᴍɪss ʏᴏᴜ*
-*┃ ✿ ᴘᴏᴡᴇʀᴇᴅ ʙʏ ${config.BOT_NAME || 'DARKZONE-MD'}*
-*╰━━━━━━━━━━━━━━━━━╯*`;
+            // 👋 HANDLE MEMBERS LEAVING
+            if (update.action === 'remove') {
+                const goodbyeMessage = `╭━━━━━━━━━━━━━━━━━━━╮
+┃  👋 GOODBYE @\){userNumber}
+┃━━━━━━━━━━━━━━━━━━━━
+┃ ❌ Left the group
+┃ 👥 Total Members: ${totalGroupMembers}
+╰━━━━━━━━━━━━━━━━━━━━━╯
+*Powered by \({config.BOT_NAME}*`;
 
-                await conn.sendMessage(id, {
-                    image: { url: 'https://files.catbox.moe/jecbfo.jpg' },
-                    caption: goodbyeText,
-                    mentions: [num]
+                await conn.sendMessage(update.id, {
+                    image: { url: config.MENU_IMAGE_URL || "https://files.catbox.moe/jecbfo.jpg" },
+                    caption: goodbyeMessage,
+                    mentions: [userJid]
                 });
             }
 
-            // ─────────────── PROMOTE MESSAGE ───────────────
-            else if (action === 'promote' && config.ADMIN_ACTION === "true") {
-                const promoter = anu.author ? anu.author.split('@')[0] : 'Someone';
-                await conn.sendMessage(id, {
-                    text: `*@${promoter} ᴘʀᴏᴍᴏᴛᴇᴅ @${userNumber} ᴛᴏ ᴀᴅᴍɪɴ*`,
-                    mentions: [anu.author || '', num]
-                });
-            }
+            // 🛡️ HANDLE ADMIN PROMOTE/DEMOTE
+            if (config.ADMIN_ACTION === "true") {
+                // ℹ️ WhatsApp no longer sends data on who performed the promote/demote for privacy reasons
+                if (update.action === 'promote') {
+                    await conn.sendMessage(update.id, {
+                        text: `🎉 *Admin Update*\n@\){userNumber} has been promoted to Group Admin!\n*Group:* \({groupName}`,
+                        mentions: [userJid]
+                    });
+                }
 
-            // ─────────────── DEMOTE MESSAGE ───────────────
-            else if (action === 'demote' && config.ADMIN_ACTION === "true") {
-                const demoter = anu.author ? anu.author.split('@')[0] : 'Someone';
-                await conn.sendMessage(id, {
-                    text: `*@${demoter} ʀᴇᴍᴏᴠᴇᴅ ᴀᴅᴍɪɴ ʀɪɢʜᴛs ғʀᴏᴍ @${userNumber}*`,
-                    mentions: [anu.author || '', num]
-                });
+                if (update.action === 'demote') {
+                    await conn.sendMessage(update.id, {
+                        text: `⚠️ *Admin Update*\n@\){userNumber} has been demoted from Group Admin!\n*Group:* ${groupName}`,
+                        mentions: [userJid]
+                    });
+                }
             }
         }
-    } catch (err) {
-        console.log('Welcome/Goodbye Error:', err);
+    } catch (error) {
+        console.error("[WELCOME SYSTEM ERROR]:", error.message);
     }
 });
-                    
+            
 
 // always Online 
 
