@@ -1,3 +1,4 @@
+
 const axios = require('axios')
 const config = require('./config')
 const {
@@ -224,139 +225,36 @@ async function connectToWA() {
     }
   });
 
-//=========WELCOME & GOODBYE & ADMIN EVENTS (FIXED) =======
+//=========WELCOME & GOODBYE (FIXED with LID Support) =======
 
-conn.ev.on('group-participants.update', async (update) => {
-    try {
-        const groupId = update.id;
-        const action = update.action;
-        const participants = update.participants;
-        const author = update.author;
-        
-        const metadata = await conn.groupMetadata(groupId);
-        const groupName = metadata.subject;
-        const groupSize = metadata.participants.length;
-        const timestamp = new Date().toLocaleString();
-
-        for (let participant of participants) {
-            
-            // Get display number (handle LID format)
-            let displayNumber;
-            if (participant.includes(':')) {
-                displayNumber = participant.split(':')[0];
-            } else {
-                displayNumber = participant.split('@')[0];
-            }
-            
-            // Get profile picture
-            let pfp;
-            try {
-                pfp = await conn.profilePictureUrl(participant, 'image');
-            } catch (err) {
-                pfp = config.MENU_IMAGE_URL || "https://files.catbox.moe/jecbfo.jpg";
-            }
-
-            // ========== WELCOME - New Member Joined ==========
-            if (action === 'add' && config.WELCOME === "true") {
-                const welcomeMsg = `*╭ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄──*
-*│  ̇─̣─̇─̣〘 ωєℓ¢σмє 〙̣─̇─̣─̇*
-*├┅┅┅┅┈┈┈┈┈┈┈┈┈┅┅┅◆*
-*│❀ нєу* @${displayNumber}!
-*│❀ gʀσᴜᴘ:* ${groupName}
-*├┅┅┅┅┈┈┈┈┈┈┈┈┈┅┅┅◆*
-*│● ѕтαу ѕαfє αɴ∂ fσℓℓσω*
-*│● тнє gʀσυᴘѕ ʀᴜℓєѕ!*
-*│● мємвєʀѕ:* ${groupSize}
-*│● ©ᴘσωєʀє∂ ву ${config.BOT_NAME}*
-*╰┉┉┉┉┈┈┈┈┈┈┈┈┉┉┉᛫᛭*`;
-
-                await conn.sendMessage(groupId, {
-                    image: { url: pfp },
-                    caption: welcomeMsg,
-                    mentions: [participant]
-                });
-                console.log(`[✅] Welcome message sent for: ${displayNumber}`);
-            }
-
-            // ========== GOODBYE - Member Left ==========
-            if (action === 'remove' && config.WELCOME === "true") {
-                const goodbyeMsg = `*╭ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄──*
-*│  ̇─̣─̇─̣〘 gσσ∂вує 〙̣─̇─̣─̇*
-*├┅┅┅┅┈┈┈┈┈┈┈┈┈┅┅┅◆*
-*│❀ ᴜѕєʀ:* @${displayNumber}
-*│● мємвєʀ ℓєfт тнє gʀσᴜᴘ*
-*│● мємвєʀѕ:* ${groupSize}
-*│● ©ᴘσωєʀє∂ ву ${config.BOT_NAME}*
-*╰┉┉┉┉┈┈┈┈┈┈┈┈┉┉┉᛫᛭*`;
-
-                await conn.sendMessage(groupId, {
-                    image: { url: config.MENU_IMAGE_URL || "https://files.catbox.moe/jecbfo.jpg" },
-                    caption: goodbyeMsg,
-                    mentions: [participant]
-                });
-                console.log(`[✅] Goodbye message sent for: ${displayNumber}`);
-            }
-
-            // ========== PROMOTE - Someone Made Admin ==========
-            if (action === 'promote' && config.ADMIN_ACTION === "true") {
-                let promoterNumber;
-                if (author && author.includes(':')) {
-                    promoterNumber = author.split(':')[0];
-                } else if (author) {
-                    promoterNumber = author.split('@')[0];
-                } else {
-                    promoterNumber = "Unknown";
-                }
-
-                const promoteMsg = `╭─〔 *🎉 ADMIN PROMOTED* 〕─╮
-│
-│ 👑 *New Admin:* @${displayNumber}
-│ 🔧 *Promoted By:* @${promoterNumber}
-│ 📅 *Time:* ${timestamp}
-│ 👥 *Group:* ${groupName}
-│
-╰─➤ *Powered by ${config.BOT_NAME}*`;
-
-                await conn.sendMessage(groupId, {
-                    text: promoteMsg,
-                    mentions: [participant, author]
-                });
-                console.log(`[✅] Promote event: ${promoterNumber} promoted ${displayNumber}`);
-            }
-
-            // ========== DEMOTE - Someone Removed From Admin ==========
-            if (action === 'demote' && config.ADMIN_ACTION === "true") {
-                let demoterNumber;
-                if (author && author.includes(':')) {
-                    demoterNumber = author.split(':')[0];
-                } else if (author) {
-                    demoterNumber = author.split('@')[0];
-                } else {
-                    demoterNumber = "Unknown";
-                }
-
-                const demoteMsg = `╭─〔 *⚠️ ADMIN DEMOTED* 〕─╮
-│
-│ 👤 *Demoted User:* @${displayNumber}
-│ 🔧 *Demoted By:* @${demoterNumber}
-│ 📅 *Time:* ${timestamp}
-│ 👥 *Group:* ${groupName}
-│
-╰─➤ *Powered by ${config.BOT_NAME}*`;
-
-                await conn.sendMessage(groupId, {
-                    text: demoteMsg,
-                    mentions: [participant, author]
-                });
-                console.log(`[✅] Demote event: ${demoterNumber} demoted ${displayNumber}`);
-            }
+} else if (connection === 'open') {
+    console.log('[🔰] DARKZONE-MD connected to WhatsApp ✅');
+    
+    // Load plugins
+    const pluginPath = path.join(__dirname, 'plugins');
+    let pluginCount = 0;
+    fs.readdirSync(pluginPath).forEach((plugin) => {
+        if (path.extname(plugin).toLowerCase() === ".js") {
+            require(path.join(pluginPath, plugin));
+            pluginCount++;
         }
-    } catch (err) {
-        console.error("❌ Error in group-participants.update:", err);
-    }
-});
+    });
+    console.log('[🔰] Plugins installed successfully ✅');
 
-//========= END WELCOME & GOODBYE & ADMIN EVENTS =======
+    // ⬇️ ADD THIS SECTION ⬇️
+    // Initialize Welcome/Goodbye Handler
+    try {
+        const { initWelcomeGoodbye } = require('./plugins/welcome');
+        initWelcomeGoodbye(conn);
+    } catch (err) {
+        console.error('[❌] Error loading welcome handler:', err);
+    }
+    // ⬆️ ADD THIS SECTION ⬆️
+
+    // ============ CONNECTION MESSAGE ============
+    try {
+        const botJid = conn.user.id.split(':')[0] + '@s.whatsapp.net';
+        // ... rest of your code
 
 // always Online 
 
