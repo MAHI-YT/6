@@ -226,122 +226,13 @@ async function connectToWA() {
   });
 
 //=========WELCOME & GOODBYE (FIXED with LID Support) =======
-//═══════════════════════════════════════════════════════════
-// WELCOME / GOODBYE / ADMIN EVENTS HANDLER
-//═══════════════════════════════════════════════════════════
+// At the top with other requires
+const GroupEvents = require('./lib/greetings'); // Adjust path as needed
 
+// After conn is created, add this event listener:
 conn.ev.on('group-participants.update', async (update) => {
-    try {
-        const { isJidGroup } = require('@whiskeysockets/baileys');
-        
-        // Validate group
-        if (!update || !update.id || !isJidGroup(update.id)) return;
-        if (!update.participants || update.participants.length === 0) return;
-
-        // Get group info
-        let metadata;
-        try {
-            metadata = await conn.groupMetadata(update.id);
-        } catch (e) {
-            console.error('Metadata error:', e.message);
-            return;
-        }
-
-        const groupName = metadata.subject || 'Unknown';
-        const memberCount = metadata.participants?.length || 0;
-        const timestamp = new Date().toLocaleString();
-
-        // Context info for forwarded appearance
-        const getContextInfo = (mentions) => ({
-            mentionedJid: mentions,
-            forwardingScore: 999,
-            isForwarded: true,
-            forwardedNewsletterMessageInfo: {
-                newsletterJid: '120363416743041101@newsletter',
-                newsletterName: config.BOT_NAME,
-                serverMessageId: 143,
-            },
-        });
-
-        // Get profile picture
-        const getPfp = async (jid) => {
-            try {
-                return await conn.profilePictureUrl(jid, 'image');
-            } catch {
-                return 'https://files.catbox.moe/jecbfo.jpg';
-            }
-        };
-
-        for (const user of update.participants) {
-            const userName = user.split('@')[0];
-
-            // ✅ WELCOME
-            if (update.action === 'add' && config.WELCOME === 'true') {
-                const pfp = await getPfp(user);
-                const welcomeMsg = `*╭ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄──*
-*│  ̇─̣─̇─̣〘 ωєℓ¢σмє 〙̣─̇─̣─̇*
-*├┅┅┅┅┈┈┈┈┈┈┈┈┈┅┅┅◆*
-*│❀ нєу* @${userName}!
-*│❀ gʀσᴜᴘ* ${groupName}
-*├┅┅┅┅┈┈┈┈┈┈┈┈┈┅┅┅◆*
-*│● мємвєʀs* ${memberCount}
-*│● тιмє* ${timestamp}
-*│● ©ᴘσωєʀє∂ ву ${config.BOT_NAME}*
-*╰┉┉┉┉┈┈┈┈┈┈┈┈┉┉┉᛫᛭*`;
-
-                await conn.sendMessage(update.id, {
-                    image: { url: pfp },
-                    caption: welcomeMsg,
-                    mentions: [user],
-                    contextInfo: getContextInfo([user]),
-                });
-            }
-
-            // 👋 GOODBYE
-            else if (update.action === 'remove' && config.WELCOME === 'true') {
-                const groupPic = await getPfp(update.id);
-                const goodbyeMsg = `*╭ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄──*
-*│  ̇─̣─̇─̣〘 gσσ∂вує 〙̣─̇─̣─̇*
-*├┅┅┅┅┈┈┈┈┈┈┈┈┈┅┅┅◆*
-*│❀ ᴜѕєʀ* @${userName}
-*│● ℓєfт тнє gʀσᴜᴘ*
-*│● мємвєʀs* ${memberCount}
-*│● ©ᴘσωєʀє∂ ву ${config.BOT_NAME}*
-*╰┉┉┉┉┈┈┈┈┈┈┈┈┉┉┉᛫᛭*`;
-
-                await conn.sendMessage(update.id, {
-                    image: { url: groupPic },
-                    caption: goodbyeMsg,
-                    mentions: [user],
-                    contextInfo: getContextInfo([user]),
-                });
-            }
-
-            // ⬆️ PROMOTE
-            else if (update.action === 'promote' && (config.ADMIN_EVENTS === 'true' || config.ADMIN_ACTION === 'true')) {
-                const promoter = update.author?.split('@')[0] || 'Admin';
-                await conn.sendMessage(update.id, {
-                    text: `╭─〔 *🎉 Admin Event* 〕\n├─ @${promoter} promoted @${userName}\n├─ *Time:* ${timestamp}\n╰─➤ *${config.BOT_NAME}*`,
-                    mentions: [update.author, user].filter(Boolean),
-                    contextInfo: getContextInfo([update.author, user].filter(Boolean)),
-                });
-            }
-
-            // ⬇️ DEMOTE
-            else if (update.action === 'demote' && (config.ADMIN_EVENTS === 'true' || config.ADMIN_ACTION === 'true')) {
-                const demoter = update.author?.split('@')[0] || 'Admin';
-                await conn.sendMessage(update.id, {
-                    text: `╭─〔 *⚠️ Admin Event* 〕\n├─ @${demoter} demoted @${userName}\n├─ *Time:* ${timestamp}\n╰─➤ *${config.BOT_NAME}*`,
-                    mentions: [update.author, user].filter(Boolean),
-                    contextInfo: getContextInfo([update.author, user].filter(Boolean)),
-                });
-            }
-        }
-    } catch (err) {
-        console.error('❌ Welcome/Goodbye Error:', err.message);
-    }
+    await GroupEvents(conn, update);
 });
-
 
 // always Online 
 
