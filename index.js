@@ -225,13 +225,40 @@ async function connectToWA() {
     }
   });
 
-//=========WELCOME & GOODBYE (FIXED with LID Support) =======
-// At the top with other requires
-const GroupEvents = require('./lib/greetings'); // Adjust path as needed
+	// ═══════════════════════════════════════════════════════════════
+// DEBUG: Check if ANY group events are being received
+// ═══════════════════════════════════════════════════════════════
 
-// After conn is created, add this event listener:
-conn.ev.on('group-participants.update', async (update) => {
-    await GroupEvents(conn, update);
+conn.ev.on('group-participants.update', (update) => {
+    console.log('═══════════════════════════════════════════');
+    console.log('🔔 GROUP EVENT RECEIVED!');
+    console.log('📦 Full Update Object:', JSON.stringify(update, null, 2));
+    console.log('═══════════════════════════════════════════');
+});
+
+// Also check if messages.upsert is working (to verify events work)
+conn.ev.on('messages.upsert', (m) => {
+    console.log('📨 Message received - Events ARE working');
+});
+
+//=========WELCOME & GOODBYE (FIXED with LID Support) =======
+// At the top
+const { initGroupEvents } = require('./lib/groupEvents');
+
+// After your connection is established and ready
+// Find where you have connection.update event, add after 'open' state:
+
+conn.ev.on('connection.update', async (update) => {
+    const { connection, lastDisconnect } = update;
+    
+    if (connection === 'open') {
+        console.log('✅ Bot Connected Successfully!');
+        
+        // Initialize group events handler HERE
+        initGroupEvents(conn);
+    }
+    
+    // ... rest of your connection handling
 });
 
 // always Online 
