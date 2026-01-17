@@ -2,8 +2,8 @@ const { cmd } = require('../command');
 const axios = require('axios');
 
 cmd({
-    pattern: "tiktok2",
-    alias: ["tt2", "mudu"],
+    pattern: "tiktokk",
+    alias: ["ttt", "mudu"],
     desc: "Download TikTok videos and photo collections",
     category: "downloader",
     react: "🎬",
