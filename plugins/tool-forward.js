@@ -4,67 +4,20 @@ const { cmd } = require("../command");
 // Safety Configuration
 const SAFETY = {
   MAX_JIDS: 20,
-  BASE_DELAY: 2000,  //  on top 🔝
-  EXTRA_DELAY: 4000,  // huh don't copy mine file 
+  BASE_DELAY: 2000,
+  EXTRA_DELAY: 4000,
 };
 
-cmd({
-  pattern: "forward",
-  alias: ["fwd"],
-  desc: "Bulk forward media to groups",
-  category: "owner",
-  filename: __filename
-}, async (client, message, match, { isOwner }) => {
+// Helper function to get message content
+async function getMessageContent(message) {
   try {
-    // Owner check
-    if (!isOwner) return await message.reply("*📛 Owner Only Command*");
-    
-    // Quoted message check
-    if (!message.quoted) return await message.reply("*🍁 Please reply to a message*");
-
-    // ===== [BULLETPROOF JID PROCESSING] ===== //
-    let jidInput = "";
-    
-    // Handle all possible match formats
-    if (typeof match === "string") {
-      jidInput = match.trim();
-    } else if (Array.isArray(match)) {
-      jidInput = match.join(" ").trim();
-    } else if (match && typeof match === "object") {
-      jidInput = match.text || "";
-    }
-    
-    // Extract JIDs (supports comma or space separated)
-    const rawJids = jidInput.split(/[\s,]+/).filter(jid => jid.trim().length > 0);
-    
-    // Process JIDs (accepts with or without @g.us)
-    const validJids = rawJids
-      .map(jid => {
-        // Remove existing @g.us if present
-        const cleanJid = jid.replace(/@g\.us$/i, "");
-        // Only keep if it's all numbers
-        return /^\d+$/.test(cleanJid) ? `${cleanJid}@g.us` : null;
-      })
-      .filter(jid => jid !== null)
-      .slice(0, SAFETY.MAX_JIDS);
-
-    if (validJids.length === 0) {
-      return await message.reply(
-        "❌ No valid group JIDs found\n" +
-        "Examples:\n" +
-        ".fwd 12036341105556472@g.us,12036333393909948@g.us\n" +
-        ".fwd 12036341055156472 12036333393999948"
-      );
-    }
-
-    // ===== [ENHANCED MEDIA HANDLING - ALL TYPES] ===== //
-    let messageContent = {};
     const mtype = message.quoted.mtype;
-    
-    // For media messages (image, video, audio, sticker, document)
+    let messageContent = {};
+
+    // Media messages (image, video, audio, sticker, document)
     if (["imageMessage", "videoMessage", "audioMessage", "stickerMessage", "documentMessage"].includes(mtype)) {
       const buffer = await message.quoted.download();
-      
+
       switch (mtype) {
         case "imageMessage":
           messageContent = {
@@ -101,71 +54,299 @@ cmd({
           };
           break;
       }
-    } 
-    // For text messages
+    }
+    // Text messages (including links)
     else if (mtype === "extendedTextMessage" || mtype === "conversation") {
       messageContent = {
-        text: message.quoted.text
+        text: message.quoted.text || message.quoted.body || ""
       };
-    } 
-    // For other message types (forwarding as-is)
+    }
     else {
-      try {
-        // Try to forward the message directly
-        messageContent = message.quoted;
-      } catch (e) {
-        return await message.reply("❌ Unsupported message type");
-      }
+      return null;
     }
 
-    // ===== [OPTIMIZED SENDING WITH PROGRESS] ===== //
+    return messageContent;
+  } catch (error) {
+    console.error("getMessageContent Error:", error);
+    return null;
+  }
+}
+
+// ============ COMMAND 1: Forward to Specific Number(s) ============
+cmd({
+  pattern: "forward",
+  alias: ["fwd"],
+  desc: "Forward message to specific number(s)",
+  category: "owner",
+  filename: __filename
+}, async (client, message, match, { isOwner }) => {
+  try {
+    if (!isOwner) return await message.reply("*📛 Owner Only Command*");
+
+    // Get input text
+    let inputText = "";
+    if (typeof match === "string") {
+      inputText = match.trim();
+    } else if (Array.isArray(match)) {
+      inputText = match.join(" ").trim();
+    } else if (match && typeof match === "object") {
+      inputText = match.text || "";
+    }
+
+    // Show usage if empty
+    if (!inputText || inputText === "") {
+      return await message.reply(
+        `*📌 Forward Command*\n\n` +
+        `*Usage:*\n` +
+        `Reply to any message and type:\n\n` +
+        `➤ .forward 923001234567\n` +
+        `➤ .fwd 923001234567,923009876543\n` +
+        `➤ .fwd 923001234567 923009876543\n\n` +
+        `*Supports:* Text, Image, Video, Audio, Document, Sticker, Links`
+      );
+    }
+
+    // Check quoted message
+    if (!message.quoted) {
+      return await message.reply("*🍁 Please reply to a message to forward*");
+    }
+
+    // Extract numbers
+    const rawNumbers = inputText.split(/[\s,]+/).filter(num => num.trim().length > 0);
+
+    // Process numbers to JIDs
+    const validJids = rawNumbers
+      .map(num => {
+        num = num.trim().replace(/[^0-9]/g, ''); // Remove non-numeric characters
+        if (num.length >= 10 && num.length <= 15) {
+          return `${num}@s.whatsapp.net`;
+        }
+        return null;
+      })
+      .filter(jid => jid !== null)
+      .slice(0, SAFETY.MAX_JIDS);
+
+    if (validJids.length === 0) {
+      return await message.reply(
+        `❌ No valid numbers found!\n\n` +
+        `*Example:*\n` +
+        `.fwd 923001234567`
+      );
+    }
+
+    // Get message content
+    const messageContent = await getMessageContent(message);
+    if (!messageContent) {
+      return await message.reply("❌ Unsupported message type!");
+    }
+
+    // Send to all numbers
     let successCount = 0;
-    const failedJids = [];
-    
-    for (const [index, jid] of validJids.entries()) {
+    const failedNumbers = [];
+
+    for (const jid of validJids) {
       try {
         await client.sendMessage(jid, messageContent);
         successCount++;
-        
-        // Progress update (every 10 groups instead of 5)
+        await new Promise(resolve => setTimeout(resolve, SAFETY.BASE_DELAY));
+      } catch (error) {
+        failedNumbers.push(jid.split('@')[0]);
+      }
+    }
+
+    // Send report
+    let report = `✅ *Forward Complete*\n\n📤 Sent: ${successCount}/${validJids.length}`;
+    if (failedNumbers.length > 0) {
+      report += `\n❌ Failed: ${failedNumbers.join(', ')}`;
+    }
+    await message.reply(report);
+
+  } catch (error) {
+    console.error("Forward Error:", error);
+    await message.reply(`💢 Error: ${error.message.substring(0, 100)}`);
+  }
+});
+
+// ============ COMMAND 2: Forward to All Groups ============
+cmd({
+  pattern: "forwardall",
+  alias: ["fwdall"],
+  desc: "Forward message to all groups",
+  category: "owner",
+  filename: __filename
+}, async (client, message, match, { isOwner }) => {
+  try {
+    if (!isOwner) return await message.reply("*📛 Owner Only Command*");
+
+    // Show usage if no quoted message
+    if (!message.quoted) {
+      return await message.reply(
+        `*📌 Forward All Command*\n\n` +
+        `*Usage:*\n` +
+        `Reply to any message and type:\n\n` +
+        `➤ .forwardall\n` +
+        `➤ .fwdall\n\n` +
+        `*This will send to ALL your groups!*\n\n` +
+        `*Supports:* Text, Image, Video, Audio, Document, Sticker, Links`
+      );
+    }
+
+    // Fetch all groups
+    await message.reply("🔄 Fetching all groups...");
+    
+    const groups = await client.groupFetchAllParticipating();
+    const groupJids = Object.keys(groups);
+
+    if (groupJids.length === 0) {
+      return await message.reply("❌ No groups found!");
+    }
+
+    await message.reply(`📢 Starting forward to ${groupJids.length} groups...`);
+
+    // Get message content
+    const messageContent = await getMessageContent(message);
+    if (!messageContent) {
+      return await message.reply("❌ Unsupported message type!");
+    }
+
+    // Send to all groups
+    let successCount = 0;
+    const failedGroups = [];
+
+    for (const [index, jid] of groupJids.entries()) {
+      try {
+        await client.sendMessage(jid, messageContent);
+        successCount++;
+
+        // Progress update every 10 groups
         if ((index + 1) % 10 === 0) {
-          await message.reply(`🔄 Sent to ${index + 1}/${validJids.length} groups...`);
+          await message.reply(`🔄 Progress: ${index + 1}/${groupJids.length} groups...`);
         }
-        
-        // Apply reduced delay
+
+        // Delay to avoid ban
         const delayTime = (index + 1) % 10 === 0 ? SAFETY.EXTRA_DELAY : SAFETY.BASE_DELAY;
         await new Promise(resolve => setTimeout(resolve, delayTime));
-        
+
       } catch (error) {
-        failedJids.push(jid.replace('@g.us', ''));
+        failedGroups.push(groups[jid]?.subject || jid.replace('@g.us', ''));
         await new Promise(resolve => setTimeout(resolve, SAFETY.BASE_DELAY));
       }
     }
 
-    // ===== [COMPREHENSIVE REPORT] ===== //
-    let report = `✅ *Forward Complete*\n\n` +
-                 `📤 Success: ${successCount}/${validJids.length}\n` +
-                 `📦 Content Type: ${mtype.replace('Message', '') || 'text'}\n`;
-    
-    if (failedJids.length > 0) {
-      report += `\n❌ Failed (${failedJids.length}): ${failedJids.slice(0, 5).join(', ')}`;
-      if (failedJids.length > 5) report += ` +${failedJids.length - 5} more`;
-    }
-    
-    if (rawJids.length > SAFETY.MAX_JIDS) {
-      report += `\n⚠️ Note: Limited to first ${SAFETY.MAX_JIDS} JIDs`;
+    // Final report
+    let report = `✅ *Forward All Complete*\n\n` +
+      `📤 Success: ${successCount}/${groupJids.length} groups\n` +
+      `📦 Content: ${message.quoted.mtype?.replace('Message', '') || 'text'}`;
+
+    if (failedGroups.length > 0) {
+      report += `\n\n❌ Failed (${failedGroups.length}):`;
+      report += `\n${failedGroups.slice(0, 5).join('\n')}`;
+      if (failedGroups.length > 5) {
+        report += `\n... +${failedGroups.length - 5} more`;
+      }
     }
 
     await message.reply(report);
 
   } catch (error) {
-    console.error("Forward Error:", error);
-    await message.reply(
-      `💢 Error: ${error.message.substring(0, 100)}\n\n` +
-      `Please try again or check:\n` +
-      `1. JID formatting\n` +
-      `2. Media type support\n` +
-      `3. Bot permissions`
-    );
+    console.error("ForwardAll Error:", error);
+    await message.reply(`💢 Error: ${error.message.substring(0, 100)}`);
+  }
+});
+
+// ============ COMMAND 3: Forward to Specific Groups by JID ============
+cmd({
+  pattern: "fwdgroup",
+  alias: ["forwardgroup", "fwdg"],
+  desc: "Forward message to specific groups by JID",
+  category: "owner",
+  filename: __filename
+}, async (client, message, match, { isOwner }) => {
+  try {
+    if (!isOwner) return await message.reply("*📛 Owner Only Command*");
+
+    // Get input
+    let inputText = "";
+    if (typeof match === "string") {
+      inputText = match.trim();
+    } else if (Array.isArray(match)) {
+      inputText = match.join(" ").trim();
+    } else if (match && typeof match === "object") {
+      inputText = match.text || "";
+    }
+
+    // Show usage
+    if (!inputText || inputText === "") {
+      return await message.reply(
+        `*📌 Forward to Groups*\n\n` +
+        `*Usage:*\n` +
+        `Reply to any message and type:\n\n` +
+        `➤ .fwdgroup 120363411055564@g.us\n` +
+        `➤ .fwdg 120363411055564@g.us,120363339399@g.us\n\n` +
+        `*Supports:* Text, Image, Video, Audio, Document, Sticker, Links`
+      );
+    }
+
+    if (!message.quoted) {
+      return await message.reply("*🍁 Please reply to a message to forward*");
+    }
+
+    // Extract JIDs
+    const rawJids = inputText.split(/[\s,]+/).filter(jid => jid.trim().length > 0);
+
+    // Process JIDs
+    const validJids = rawJids
+      .map(jid => {
+        const cleanJid = jid.replace(/@g\.us$/i, "").replace(/[^0-9]/g, '');
+        return cleanJid.length > 0 ? `${cleanJid}@g.us` : null;
+      })
+      .filter(jid => jid !== null)
+      .slice(0, SAFETY.MAX_JIDS);
+
+    if (validJids.length === 0) {
+      return await message.reply(
+        `❌ No valid group JIDs found!\n\n` +
+        `*Example:*\n` +
+        `.fwdg 120363411055564@g.us`
+      );
+    }
+
+    // Get message content
+    const messageContent = await getMessageContent(message);
+    if (!messageContent) {
+      return await message.reply("❌ Unsupported message type!");
+    }
+
+    // Send to groups
+    let successCount = 0;
+    const failedJids = [];
+
+    for (const [index, jid] of validJids.entries()) {
+      try {
+        await client.sendMessage(jid, messageContent);
+        successCount++;
+
+        if ((index + 1) % 10 === 0) {
+          await message.reply(`🔄 Progress: ${index + 1}/${validJids.length}...`);
+        }
+
+        const delayTime = (index + 1) % 10 === 0 ? SAFETY.EXTRA_DELAY : SAFETY.BASE_DELAY;
+        await new Promise(resolve => setTimeout(resolve, delayTime));
+
+      } catch (error) {
+        failedJids.push(jid.replace('@g.us', ''));
+      }
+    }
+
+    // Report
+    let report = `✅ *Forward Complete*\n\n📤 Sent: ${successCount}/${validJids.length} groups`;
+    if (failedJids.length > 0) {
+      report += `\n❌ Failed: ${failedJids.length} groups`;
+    }
+    await message.reply(report);
+
+  } catch (error) {
+    console.error("FwdGroup Error:", error);
+    await message.reply(`💢 Error: ${error.message.substring(0, 100)}`);
   }
 });
