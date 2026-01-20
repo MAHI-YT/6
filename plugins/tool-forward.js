@@ -1,352 +1,275 @@
-
 const { cmd } = require("../command");
 
-// Safety Configuration
-const SAFETY = {
-  MAX_JIDS: 20,
-  BASE_DELAY: 2000,
-  EXTRA_DELAY: 4000,
-};
-
-// Helper function to get message content
-async function getMessageContent(message) {
-  try {
-    const mtype = message.quoted.mtype;
-    let messageContent = {};
-
-    // Media messages (image, video, audio, sticker, document)
-    if (["imageMessage", "videoMessage", "audioMessage", "stickerMessage", "documentMessage"].includes(mtype)) {
-      const buffer = await message.quoted.download();
-
-      switch (mtype) {
-        case "imageMessage":
-          messageContent = {
-            image: buffer,
-            caption: message.quoted.text || '',
-            mimetype: message.quoted.mimetype || "image/jpeg"
-          };
-          break;
-        case "videoMessage":
-          messageContent = {
-            video: buffer,
-            caption: message.quoted.text || '',
-            mimetype: message.quoted.mimetype || "video/mp4"
-          };
-          break;
-        case "audioMessage":
-          messageContent = {
-            audio: buffer,
-            mimetype: message.quoted.mimetype || "audio/mp4",
-            ptt: message.quoted.ptt || false
-          };
-          break;
-        case "stickerMessage":
-          messageContent = {
-            sticker: buffer,
-            mimetype: message.quoted.mimetype || "image/webp"
-          };
-          break;
-        case "documentMessage":
-          messageContent = {
-            document: buffer,
-            mimetype: message.quoted.mimetype || "application/octet-stream",
-            fileName: message.quoted.fileName || "document"
-          };
-          break;
-      }
-    }
-    // Text messages (including links)
-    else if (mtype === "extendedTextMessage" || mtype === "conversation") {
-      messageContent = {
-        text: message.quoted.text || message.quoted.body || ""
-      };
-    }
-    else {
-      return null;
-    }
-
-    return messageContent;
-  } catch (error) {
-    console.error("getMessageContent Error:", error);
-    return null;
-  }
-}
-
-// ============ COMMAND 1: Forward to Specific Number(s) ============
 cmd({
-  pattern: "forward",
-  alias: ["fwd"],
-  desc: "Forward message to specific number(s)",
-  category: "owner",
+  pattern: "save",
+  alias: ["sv", "saveit", "aeff", "vo"],
+  desc: "Save any message to your inbox (including view once)",
+  category: "utility",
   filename: __filename
-}, async (client, message, match, { isOwner }) => {
+}, async (client, message, match, { sender }) => {
   try {
-    if (!isOwner) return await message.reply("*📛 Owner Only Command*");
-
-    // Get input text
-    let inputText = "";
-    if (typeof match === "string") {
-      inputText = match.trim();
-    } else if (Array.isArray(match)) {
-      inputText = match.join(" ").trim();
-    } else if (match && typeof match === "object") {
-      inputText = match.text || "";
-    }
-
-    // Show usage if empty
-    if (!inputText || inputText === "") {
+    // Check if message is quoted
+    if (!message.quoted) {
       return await message.reply(
-        `*📌 Forward Command*\n\n` +
+        `*📌 Save Command*\n\n` +
         `*Usage:*\n` +
         `Reply to any message and type:\n\n` +
-        `➤ .forward 923001234567\n` +
-        `➤ .fwd 923001234567,923009876543\n` +
-        `➤ .fwd 923001234567 923009876543\n\n` +
-        `*Supports:* Text, Image, Video, Audio, Document, Sticker, Links`
+        `➤ .save\n` +
+        `➤ .sv\n` +
+        `➤ .viewonce\n\n` +
+        `*Supports:*\n` +
+        `✅ View Once Photos/Videos\n` +
+        `✅ Photos & Videos\n` +
+        `✅ Voice Notes & Audio\n` +
+        `✅ Documents & Stickers\n` +
+        `✅ Text, Links & Numbers`
       );
     }
 
-    // Check quoted message
-    if (!message.quoted) {
-      return await message.reply("*🍁 Please reply to a message to forward*");
-    }
+    // Get the quoted message
+    const quotedMsg = message.quoted;
+    let mtype = quotedMsg.mtype;
+    let mediaMsg = quotedMsg;
+    let isViewOnce = false;
 
-    // Extract numbers
-    const rawNumbers = inputText.split(/[\s,]+/).filter(num => num.trim().length > 0);
-
-    // Process numbers to JIDs
-    const validJids = rawNumbers
-      .map(num => {
-        num = num.trim().replace(/[^0-9]/g, ''); // Remove non-numeric characters
-        if (num.length >= 10 && num.length <= 15) {
-          return `${num}@s.whatsapp.net`;
-        }
-        return null;
-      })
-      .filter(jid => jid !== null)
-      .slice(0, SAFETY.MAX_JIDS);
-
-    if (validJids.length === 0) {
-      return await message.reply(
-        `❌ No valid numbers found!\n\n` +
-        `*Example:*\n` +
-        `.fwd 923001234567`
-      );
-    }
-
-    // Get message content
-    const messageContent = await getMessageContent(message);
-    if (!messageContent) {
-      return await message.reply("❌ Unsupported message type!");
-    }
-
-    // Send to all numbers
-    let successCount = 0;
-    const failedNumbers = [];
-
-    for (const jid of validJids) {
-      try {
-        await client.sendMessage(jid, messageContent);
-        successCount++;
-        await new Promise(resolve => setTimeout(resolve, SAFETY.BASE_DELAY));
-      } catch (error) {
-        failedNumbers.push(jid.split('@')[0]);
+    // ===== Handle View Once Messages ===== //
+    if (mtype === "viewOnceMessage" || mtype === "viewOnceMessageV2" || mtype === "viewOnceMessageV2Extension") {
+      isViewOnce = true;
+      
+      // Extract the actual message from view once wrapper
+      const viewOnceContent = quotedMsg.message?.viewOnceMessage?.message ||
+                              quotedMsg.message?.viewOnceMessageV2?.message ||
+                              quotedMsg.message?.viewOnceMessageV2Extension?.message ||
+                              quotedMsg.message;
+      
+      if (viewOnceContent?.imageMessage) {
+        mtype = "imageMessage";
+        mediaMsg = { ...quotedMsg, message: { imageMessage: viewOnceContent.imageMessage } };
+      } else if (viewOnceContent?.videoMessage) {
+        mtype = "videoMessage";
+        mediaMsg = { ...quotedMsg, message: { videoMessage: viewOnceContent.videoMessage } };
+      } else if (viewOnceContent?.audioMessage) {
+        mtype = "audioMessage";
+        mediaMsg = { ...quotedMsg, message: { audioMessage: viewOnceContent.audioMessage } };
       }
     }
 
-    // Send report
-    let report = `✅ *Forward Complete*\n\n📤 Sent: ${successCount}/${validJids.length}`;
-    if (failedNumbers.length > 0) {
-      report += `\n❌ Failed: ${failedNumbers.join(', ')}`;
-    }
-    await message.reply(report);
-
-  } catch (error) {
-    console.error("Forward Error:", error);
-    await message.reply(`💢 Error: ${error.message.substring(0, 100)}`);
-  }
-});
-
-// ============ COMMAND 2: Forward to All Groups ============
-cmd({
-  pattern: "forwardall",
-  alias: ["fwdall"],
-  desc: "Forward message to all groups",
-  category: "owner",
-  filename: __filename
-}, async (client, message, match, { isOwner }) => {
-  try {
-    if (!isOwner) return await message.reply("*📛 Owner Only Command*");
-
-    // Show usage if no quoted message
-    if (!message.quoted) {
-      return await message.reply(
-        `*📌 Forward All Command*\n\n` +
-        `*Usage:*\n` +
-        `Reply to any message and type:\n\n` +
-        `➤ .forwardall\n` +
-        `➤ .fwdall\n\n` +
-        `*This will send to ALL your groups!*\n\n` +
-        `*Supports:* Text, Image, Video, Audio, Document, Sticker, Links`
-      );
-    }
-
-    // Fetch all groups
-    await message.reply("🔄 Fetching all groups...");
+    // Get sender's private chat JID
+    const userJid = sender.includes('@') ? sender : `${sender}@s.whatsapp.net`;
     
-    const groups = await client.groupFetchAllParticipating();
-    const groupJids = Object.keys(groups);
+    let messageContent = {};
+    let savedType = "";
 
-    if (groupJids.length === 0) {
-      return await message.reply("❌ No groups found!");
+    // ===== Image Message ===== //
+    if (mtype === "imageMessage") {
+      const buffer = await quotedMsg.download();
+      messageContent = {
+        image: buffer,
+        caption: `${isViewOnce ? '👁️ *View Once Saved*\n\n' : '📸 *Image Saved*\n\n'}` +
+                 `${quotedMsg.text || quotedMsg.message?.imageMessage?.caption || ''}`
+      };
+      savedType = isViewOnce ? "View Once Photo" : "Photo";
     }
-
-    await message.reply(`📢 Starting forward to ${groupJids.length} groups...`);
-
-    // Get message content
-    const messageContent = await getMessageContent(message);
-    if (!messageContent) {
-      return await message.reply("❌ Unsupported message type!");
+    
+    // ===== Video Message ===== //
+    else if (mtype === "videoMessage") {
+      const buffer = await quotedMsg.download();
+      messageContent = {
+        video: buffer,
+        caption: `${isViewOnce ? '👁️ *View Once Saved*\n\n' : '🎥 *Video Saved*\n\n'}` +
+                 `${quotedMsg.text || quotedMsg.message?.videoMessage?.caption || ''}`
+      };
+      savedType = isViewOnce ? "View Once Video" : "Video";
     }
-
-    // Send to all groups
-    let successCount = 0;
-    const failedGroups = [];
-
-    for (const [index, jid] of groupJids.entries()) {
-      try {
-        await client.sendMessage(jid, messageContent);
-        successCount++;
-
-        // Progress update every 10 groups
-        if ((index + 1) % 10 === 0) {
-          await message.reply(`🔄 Progress: ${index + 1}/${groupJids.length} groups...`);
-        }
-
-        // Delay to avoid ban
-        const delayTime = (index + 1) % 10 === 0 ? SAFETY.EXTRA_DELAY : SAFETY.BASE_DELAY;
-        await new Promise(resolve => setTimeout(resolve, delayTime));
-
-      } catch (error) {
-        failedGroups.push(groups[jid]?.subject || jid.replace('@g.us', ''));
-        await new Promise(resolve => setTimeout(resolve, SAFETY.BASE_DELAY));
+    
+    // ===== Audio/Voice Message ===== //
+    else if (mtype === "audioMessage") {
+      const buffer = await quotedMsg.download();
+      const isPtt = quotedMsg.message?.audioMessage?.ptt || 
+                    quotedMsg.ptt || 
+                    false;
+      
+      messageContent = {
+        audio: buffer,
+        mimetype: quotedMsg.mimetype || "audio/mp4",
+        ptt: isPtt
+      };
+      savedType = isPtt ? "Voice Note" : "Audio";
+    }
+    
+    // ===== Sticker Message ===== //
+    else if (mtype === "stickerMessage") {
+      const buffer = await quotedMsg.download();
+      messageContent = {
+        sticker: buffer
+      };
+      savedType = "Sticker";
+    }
+    
+    // ===== Document Message ===== //
+    else if (mtype === "documentMessage") {
+      const buffer = await quotedMsg.download();
+      messageContent = {
+        document: buffer,
+        mimetype: quotedMsg.mimetype || "application/octet-stream",
+        fileName: quotedMsg.fileName || quotedMsg.message?.documentMessage?.fileName || "document"
+      };
+      savedType = "Document";
+    }
+    
+    // ===== Text Messages (including links, numbers) ===== //
+    else if (mtype === "extendedTextMessage" || mtype === "conversation") {
+      const textContent = quotedMsg.text || 
+                         quotedMsg.body || 
+                         quotedMsg.message?.conversation ||
+                         quotedMsg.message?.extendedTextMessage?.text || 
+                         "";
+      
+      if (!textContent) {
+        return await message.reply("❌ No text content found!");
       }
+      
+      messageContent = {
+        text: `📝 *Text Saved*\n\n${textContent}`
+      };
+      savedType = "Text";
+    }
+    
+    // ===== Contact Message ===== //
+    else if (mtype === "contactMessage" || mtype === "contactsArrayMessage") {
+      const vcard = quotedMsg.message?.contactMessage?.vcard ||
+                   quotedMsg.message?.contactsArrayMessage?.contacts?.[0]?.vcard || "";
+      
+      // Extract phone number from vcard
+      const phoneMatch = vcard.match(/TEL[^:]*:([+\d]+)/i);
+      const phone = phoneMatch ? phoneMatch[1] : "Unknown";
+      
+      // Extract name from vcard
+      const nameMatch = vcard.match(/FN:(.+)/i);
+      const name = nameMatch ? nameMatch[1] : "Unknown";
+      
+      messageContent = {
+        text: `📱 *Contact Saved*\n\n👤 Name: ${name}\n📞 Number: ${phone}`
+      };
+      savedType = "Contact";
+    }
+    
+    // ===== Location Message ===== //
+    else if (mtype === "locationMessage" || mtype === "liveLocationMessage") {
+      const lat = quotedMsg.message?.locationMessage?.degreesLatitude ||
+                 quotedMsg.message?.liveLocationMessage?.degreesLatitude;
+      const long = quotedMsg.message?.locationMessage?.degreesLongitude ||
+                  quotedMsg.message?.liveLocationMessage?.degreesLongitude;
+      
+      messageContent = {
+        text: `📍 *Location Saved*\n\n` +
+              `Latitude: ${lat}\n` +
+              `Longitude: ${long}\n\n` +
+              `🗺️ Google Maps:\nhttps://maps.google.com/?q=${lat},${long}`
+      };
+      savedType = "Location";
+    }
+    
+    // ===== Unsupported Type ===== //
+    else {
+      return await message.reply(
+        `❌ Unsupported message type: ${mtype}\n\n` +
+        `Please try with:\n` +
+        `• Photos/Videos\n` +
+        `• Voice Notes/Audio\n` +
+        `• Documents\n` +
+        `• Text Messages\n` +
+        `• View Once Media`
+      );
     }
 
-    // Final report
-    let report = `✅ *Forward All Complete*\n\n` +
-      `📤 Success: ${successCount}/${groupJids.length} groups\n` +
-      `📦 Content: ${message.quoted.mtype?.replace('Message', '') || 'text'}`;
-
-    if (failedGroups.length > 0) {
-      report += `\n\n❌ Failed (${failedGroups.length}):`;
-      report += `\n${failedGroups.slice(0, 5).join('\n')}`;
-      if (failedGroups.length > 5) {
-        report += `\n... +${failedGroups.length - 5} more`;
-      }
-    }
-
-    await message.reply(report);
+    // Send to user's inbox
+    await client.sendMessage(userJid, messageContent);
+    
+    // Confirm save
+    await message.reply(
+      `✅ *Saved Successfully!*\n\n` +
+      `📦 Type: ${savedType}\n` +
+      `📥 Sent to: Your Inbox\n` +
+      `${isViewOnce ? '\n👁️ View Once media recovered!' : ''}`
+    );
 
   } catch (error) {
-    console.error("ForwardAll Error:", error);
-    await message.reply(`💢 Error: ${error.message.substring(0, 100)}`);
+    console.error("Save Error:", error);
+    await message.reply(
+      `💢 Error: ${error.message.substring(0, 100)}\n\n` +
+      `Try again or check if the media is still available.`
+    );
   }
 });
 
-// ============ COMMAND 3: Forward to Specific Groups by JID ============
+// ===== Alternative: Save View Once Only ===== //
 cmd({
-  pattern: "fwdgroup",
-  alias: ["forwardgroup", "fwdg"],
-  desc: "Forward message to specific groups by JID",
-  category: "owner",
+  pattern: "vv",
+  alias: ["viewoncesave", "vosave"],
+  desc: "Quick save view once media",
+  category: "utility",
   filename: __filename
-}, async (client, message, match, { isOwner }) => {
+}, async (client, message, match, { sender }) => {
   try {
-    if (!isOwner) return await message.reply("*📛 Owner Only Command*");
-
-    // Get input
-    let inputText = "";
-    if (typeof match === "string") {
-      inputText = match.trim();
-    } else if (Array.isArray(match)) {
-      inputText = match.join(" ").trim();
-    } else if (match && typeof match === "object") {
-      inputText = match.text || "";
-    }
-
-    // Show usage
-    if (!inputText || inputText === "") {
-      return await message.reply(
-        `*📌 Forward to Groups*\n\n` +
-        `*Usage:*\n` +
-        `Reply to any message and type:\n\n` +
-        `➤ .fwdgroup 120363411055564@g.us\n` +
-        `➤ .fwdg 120363411055564@g.us,120363339399@g.us\n\n` +
-        `*Supports:* Text, Image, Video, Audio, Document, Sticker, Links`
-      );
-    }
-
     if (!message.quoted) {
-      return await message.reply("*🍁 Please reply to a message to forward*");
-    }
-
-    // Extract JIDs
-    const rawJids = inputText.split(/[\s,]+/).filter(jid => jid.trim().length > 0);
-
-    // Process JIDs
-    const validJids = rawJids
-      .map(jid => {
-        const cleanJid = jid.replace(/@g\.us$/i, "").replace(/[^0-9]/g, '');
-        return cleanJid.length > 0 ? `${cleanJid}@g.us` : null;
-      })
-      .filter(jid => jid !== null)
-      .slice(0, SAFETY.MAX_JIDS);
-
-    if (validJids.length === 0) {
       return await message.reply(
-        `❌ No valid group JIDs found!\n\n` +
-        `*Example:*\n` +
-        `.fwdg 120363411055564@g.us`
+        `*👁️ View Once Saver*\n\n` +
+        `Reply to a view once photo/video and type:\n` +
+        `➤ .vv`
       );
     }
 
-    // Get message content
-    const messageContent = await getMessageContent(message);
-    if (!messageContent) {
-      return await message.reply("❌ Unsupported message type!");
+    const quotedMsg = message.quoted;
+    const mtype = quotedMsg.mtype;
+
+    // Check if it's view once
+    if (!mtype?.includes("viewOnce")) {
+      return await message.reply("❌ This is not a view once message!\n\nUse .save for regular media.");
     }
 
-    // Send to groups
-    let successCount = 0;
-    const failedJids = [];
+    // Extract view once content
+    const viewOnceContent = quotedMsg.message?.viewOnceMessage?.message ||
+                            quotedMsg.message?.viewOnceMessageV2?.message ||
+                            quotedMsg.message?.viewOnceMessageV2Extension?.message;
 
-    for (const [index, jid] of validJids.entries()) {
-      try {
-        await client.sendMessage(jid, messageContent);
-        successCount++;
-
-        if ((index + 1) % 10 === 0) {
-          await message.reply(`🔄 Progress: ${index + 1}/${validJids.length}...`);
-        }
-
-        const delayTime = (index + 1) % 10 === 0 ? SAFETY.EXTRA_DELAY : SAFETY.BASE_DELAY;
-        await new Promise(resolve => setTimeout(resolve, delayTime));
-
-      } catch (error) {
-        failedJids.push(jid.replace('@g.us', ''));
-      }
+    if (!viewOnceContent) {
+      return await message.reply("❌ Could not extract view once content!");
     }
 
-    // Report
-    let report = `✅ *Forward Complete*\n\n📤 Sent: ${successCount}/${validJids.length} groups`;
-    if (failedJids.length > 0) {
-      report += `\n❌ Failed: ${failedJids.length} groups`;
+    const userJid = sender.includes('@') ? sender : `${sender}@s.whatsapp.net`;
+    const buffer = await quotedMsg.download();
+
+    let messageContent = {};
+    let mediaType = "";
+
+    if (viewOnceContent.imageMessage) {
+      messageContent = {
+        image: buffer,
+        caption: `👁️ *View Once Photo Saved*\n\n${viewOnceContent.imageMessage.caption || ''}`
+      };
+      mediaType = "Photo";
+    } else if (viewOnceContent.videoMessage) {
+      messageContent = {
+        video: buffer,
+        caption: `👁️ *View Once Video Saved*\n\n${viewOnceContent.videoMessage.caption || ''}`
+      };
+      mediaType = "Video";
+    } else if (viewOnceContent.audioMessage) {
+      messageContent = {
+        audio: buffer,
+        ptt: viewOnceContent.audioMessage.ptt || false
+      };
+      mediaType = "Audio";
+    } else {
+      return await message.reply("❌ Unknown view once type!");
     }
-    await message.reply(report);
+
+    await client.sendMessage(userJid, messageContent);
+    await message.reply(`✅ View Once ${mediaType} saved to your inbox!`);
 
   } catch (error) {
-    console.error("FwdGroup Error:", error);
+    console.error("VV Error:", error);
     await message.reply(`💢 Error: ${error.message.substring(0, 100)}`);
   }
 });
