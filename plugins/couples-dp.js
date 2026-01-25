@@ -17,14 +17,14 @@ cmd({
   try {
     reply("*💑 Fetching couple profile pictures...*");
     
-    const response = await axios.get("https://api.davidcyriltech.my.id/couplepp");
+    const response = await axios.get("https://api.deline.web.id/random/ppcouple");
 
-    if (!response.data || !response.data.success) {
+    if (!response.data || !response.data.status) {
       return reply("❌ Failed to fetch couple profile pictures. Please try again later.");
     }
 
-    const malePp = response.data.male;
-    const femalePp = response.data.female;
+    const malePp = response.data.result.cowo;
+    const femalePp = response.data.result.cewe;
 
     if (malePp) {
       await conn.sendMessage(from, {
