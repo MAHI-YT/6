@@ -2,64 +2,110 @@ const axios = require('axios');
 const config = require('../config');
 const { cmd } = require('../command');
 
-function getGoogleImageSearch(query) {
-    const apis = [
-        `https://api.delirius.xyz/search/gimage?query=${encodeURIComponent(query)}`,
-        `https://api.siputzx.my.id/api/images?query=${encodeURIComponent(query)}`
-    ]
-    
-    return { 
-        getAll: async () => {
-            for (const url of apis) {
-                try {
-                    const res = await axios.get(url)
-                    const data = res.data
-                    if (Array.isArray(data?.data)) {
-                        const urls = data.data.map(d => d.url).filter(u => typeof u === 'string' && u.startsWith('http'))
-                        if (urls.length) return urls
-                    }
-                } catch {}
-            }
-            return []
-        },
-        getRandom: async () => {
-            const all = await this.getAll()
-            return all[Math.floor(Math.random() * all.length)] || null
-        }
-    }
-}
-
 cmd({
     pattern: "imagen",
-    alias: ["image", "img"],
-    react: "🕒",
+    alias: ["image", "img", "gimage"],
+    react: "🖼️",
     desc: "Search for images",
     category: "search",
     use: ".imagen <query>",
     filename: __filename
 }, async (conn, mek, m, { from, q, reply }) => {
     try {
-        if (!q) return reply(`❀ Please enter a text to search for an Image.`)
+        if (!q) return reply(`❀ Please enter a text to search for an Image.`);
 
-        await reply("*SEARCHING FOR IMAGES...*")
+        await conn.sendMessage(from, { react: { text: "🔍", key: m.key } });
+        await reply("*🔎 SEARCHING FOR IMAGES...*");
 
-        const res = await getGoogleImageSearch(q)
-        const urls = await res.getAll()
+        // New Working API
+        const apiURL = `https://api-faa.my.id/faa/google-image?query=${encodeURIComponent(q)}`;
         
-        if (urls.length < 2) return reply('✧ Not enough images found for an album.')
-        
-        const medias = urls.slice(0, 10).map(url => ({ image: { url } }))
-        const caption = `> DARKZONE-MD RESULTS FOR: ${q}`
-        
-        // Send multiple images
-        for (let media of medias) {
-            await conn.sendMessage(from, media, { quoted: m })
+        let data;
+        try {
+            const res = await axios.get(apiURL, {
+                timeout: 30000,
+                headers: {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                }
+            });
+            data = res.data;
+            console.log("API Response:", JSON.stringify(data, null, 2));
+        } catch (apiErr) {
+            console.error("API Error:", apiErr.message);
+            return reply("❌ Failed to connect to API. Please try again.");
         }
+
+        // Check API status
+        if (!data.status || data.status === false) {
+            return reply("⚠️ API returned an error. Please try different query.");
+        }
+
+        // Extract image URLs from result array
+        let imageUrls = [];
         
-        await conn.sendMessage(from, { text: caption }, { quoted: m })
+        if (Array.isArray(data.result)) {
+            // New API format: result is array of URLs directly
+            imageUrls = data.result.filter(url => typeof url === 'string' && url.startsWith('http'));
+        } else if (Array.isArray(data.data)) {
+            // Old format fallback
+            imageUrls = data.data.map(d => d.url).filter(u => typeof u === 'string' && u.startsWith('http'));
+        }
+
+        if (imageUrls.length === 0) {
+            return reply("✧ No images found for your search query.");
+        }
+
+        if (imageUrls.length < 2) {
+            return reply("✧ Not enough images found for an album.");
+        }
+
+        // Update reaction
+        await conn.sendMessage(from, { react: { text: "⬆️", key: m.key } });
+
+        // Get up to 10 images
+        const selectedImages = imageUrls.slice(0, 10);
+        
+        // Send each image
+        let sentCount = 0;
+        for (let i = 0; i < selectedImages.length; i++) {
+            try {
+                await conn.sendMessage(from, {
+                    image: { url: selectedImages[i] },
+                    caption: i === 0 ? `🔍 *Results for:* ${q}\n\n> 📥 *DARKZONE-MD*` : ""
+                }, { quoted: m });
+                
+                sentCount++;
+                
+                // Small delay to prevent flood
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+            } catch (imgErr) {
+                console.warn(`Failed to send image ${i + 1}:`, imgErr.message);
+                continue;
+            }
+        }
+
+        if (sentCount === 0) {
+            return reply("❌ Failed to send any images. Please try again.");
+        }
+
+        // Success reaction
+        await conn.sendMessage(from, { react: { text: "✅", key: m.key } });
+
+        // Final message
+        await conn.sendMessage(from, {
+            text: `╭━━━〔 *IMAGE SEARCH* 〕━━━⊷
+┃▸ *Query:* ${q}
+┃▸ *Images Sent:* ${sentCount}
+┃▸ *Total Found:* ${imageUrls.length}
+╰━━━⪼
+
+> 📥 *DARKZONE-MD*`
+        }, { quoted: m });
 
     } catch (error) {
-        console.error('Image Search Error:', error)
-        reply(`⚠️ A problem has occurred.\n\n${error.message}`)
+        console.error('Image Search Error:', error);
+        await conn.sendMessage(from, { react: { text: "❌", key: m.key } });
+        reply(`⚠️ A problem has occurred.\n\n${error.message}`);
     }
-})
+});
