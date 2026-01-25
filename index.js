@@ -226,121 +226,26 @@ async function connectToWA() {
   });
 
 	// ═══════════════════════════════════════════════════════════════
-// DEBUG: Check if ANY group events are being received
-// ═══════════════════════════════════════════════════════════════
 
-conn.ev.on('group-participants.update', (update) => {
-    console.log('═══════════════════════════════════════════');
-    console.log('🔔 GROUP EVENT RECEIVED!');
-    console.log('📦 Full Update Object:', JSON.stringify(update, null, 2));
-    console.log('═══════════════════════════════════════════');
-});
 
-// Also check if messages.upsert is working (to verify events work)
-conn.ev.on('messages.upsert', (m) => {
-    console.log('📨 Message received - Events ARE working');
-});
+            
+const { handleAntiStatus } = require('./lib/antiStatusHandler')
 
-//=========WELCOME & GOODBYE (FIXED with LID Support) ======
-// ══════════════════════════════════════════════════════════════════
-// GROUP EVENTS - WELCOME / GOODBYE / PROMOTE / DEMOTE
-// For Baileys 7.0.0-rc.9
-// ══════════════════════════════════════════════════════════════════
-
-conn.ev.on('group-participants.update', async (update) => {
-    
-    // ALWAYS log to see if event fires
-    console.log('\n════════════════════════════════════');
-    console.log('🔔 GROUP EVENT DETECTED!');
-    console.log('🆔 Group:', update?.id);
-    console.log('🎯 Action:', update?.action);
-    console.log('👥 Participants:', update?.participants);
-    console.log('👤 Author:', update?.author);
-    console.log('════════════════════════════════════\n');
-    
+// In messages.upsert event
+conn.ev.on('messages.upsert', async (m) => {
     try {
-        // Basic validations
-        if (!update?.id?.endsWith('@g.us')) return;
-        if (!update?.participants?.length) return;
-        if (!update?.action) return;
+        const mek = m.messages[0]
+        if (!mek.message) return
         
-        // Get group info
-        const metadata = await conn.groupMetadata(update.id);
-        const groupName = metadata.subject;
-        const memberCount = metadata.participants.length;
-        const time = new Date().toLocaleString();
+        // Anti-Status Handler
+        await handleAntiStatus(conn, mek, m)
         
-        for (const user of update.participants) {
-            const name = user.split('@')[0];
-            
-            // Get profile pic
-            let pic;
-            try {
-                pic = await conn.profilePictureUrl(user, 'image');
-            } catch {
-                pic = 'https://files.catbox.moe/jecbfo.jpg';
-            }
-            
-            // WELCOME
-            if (update.action === 'add' && config.WELCOME === 'true') {
-                console.log('📨 Sending WELCOME to:', name);
-                await conn.sendMessage(update.id, {
-                    image: { url: pic },
-                    caption: `*Welcome @${name}!* 👋\n\n` +
-                             `📛 Group: ${groupName}\n` +
-                             `👥 Members: ${memberCount}\n` +
-                             `⏰ Time: ${time}\n\n` +
-                             `_Powered by ${config.BOT_NAME}_`,
-                    mentions: [user]
-                });
-                console.log('✅ Welcome sent!');
-            }
-            
-            // GOODBYE
-            else if (update.action === 'remove' && config.WELCOME === 'true') {
-                console.log('📨 Sending GOODBYE to:', name);
-                await conn.sendMessage(update.id, {
-                    text: `*Goodbye @${name}!* 👋\n\n` +
-                          `📛 Left: ${groupName}\n` +
-                          `👥 Members: ${memberCount}\n` +
-                          `⏰ Time: ${time}\n\n` +
-                          `_Powered by ${config.BOT_NAME}_`,
-                    mentions: [user]
-                });
-                console.log('✅ Goodbye sent!');
-            }
-            
-            // PROMOTE
-            else if (update.action === 'promote') {
-                const by = update.author?.split('@')[0] || 'Admin';
-                console.log('📨 Sending PROMOTE notification');
-                await conn.sendMessage(update.id, {
-                    text: `🎉 *Admin Event*\n\n` +
-                          `@${by} promoted @${name} to admin!\n` +
-                          `⏰ ${time}`,
-                    mentions: [update.author, user].filter(Boolean)
-                });
-                console.log('✅ Promote sent!');
-            }
-            
-            // DEMOTE
-            else if (update.action === 'demote') {
-                const by = update.author?.split('@')[0] || 'Admin';
-                console.log('📨 Sending DEMOTE notification');
-                await conn.sendMessage(update.id, {
-                    text: `⚠️ *Admin Event*\n\n` +
-                          `@${by} demoted @${name} from admin!\n` +
-                          `⏰ ${time}`,
-                    mentions: [update.author, user].filter(Boolean)
-                });
-                console.log('✅ Demote sent!');
-            }
-        }
+        // Your other message handling code...
+        
     } catch (err) {
-        console.error('❌ Group Event Error:', err.message);
+        console.error('Error:', err)
     }
-});
-
+})
 
 	
 // always Online 
