@@ -17,57 +17,65 @@ cmd({
         await conn.sendMessage(from, { react: { text: "🔍", key: m.key } });
         await reply("*🔎 SEARCHING FOR IMAGES...*");
 
-        // New Working API - Correct Format
+        // API Call
         const apiURL = `https://api-faa.my.id/faa/google-image?query=${encodeURIComponent(q)}`;
         
-        console.log("Calling API:", apiURL);
-
         const res = await axios.get(apiURL, {
-            timeout: 30000,
-            headers: {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            }
+            timeout: 30000
         });
 
         const data = res.data;
-        console.log("Full API Response:", JSON.stringify(data, null, 2));
 
-        // Check if result exists and is array
-        if (!data.result || !Array.isArray(data.result) || data.result.length === 0) {
-            return reply("✧ No images found for your search query.");
+        if (!data.result || data.result.length === 0) {
+            return reply("✧ No images found.");
         }
 
-        // Get image URLs directly from result array
         const imageUrls = data.result;
-
-        console.log("Found Images:", imageUrls.length);
-
-        // Update reaction
+        
         await conn.sendMessage(from, { react: { text: "⬆️", key: m.key } });
 
-        // Send up to 5 images
-        const maxImages = Math.min(imageUrls.length, 5);
-        
-        for (let i = 0; i < maxImages; i++) {
+        let sentCount = 0;
+
+        // Try to send each image
+        for (let i = 0; i < Math.min(imageUrls.length, 5); i++) {
             try {
+                // Download image as buffer first
+                const imgResponse = await axios.get(imageUrls[i], {
+                    responseType: 'arraybuffer',
+                    timeout: 15000,
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
+                        'Accept-Language': 'en-US,en;q=0.9',
+                        'Referer': 'https://www.google.com/'
+                    }
+                });
+
+                const imageBuffer = Buffer.from(imgResponse.data);
+
+                // Send buffer
                 await conn.sendMessage(from, {
-                    image: { url: imageUrls[i] },
-                    caption: i === 0 ? `🔍 *Results for:* ${q}\n\n> 📥 *DARKZONE-MD*` : ""
+                    image: imageBuffer,
+                    caption: sentCount === 0 ? `🔍 *Results for:* ${q}\n\n> 📥 *DARKZONE-MD*` : ""
                 }, { quoted: m });
 
-                // Delay between sends
+                sentCount++;
                 await new Promise(r => setTimeout(r, 1500));
 
             } catch (imgErr) {
-                console.warn(`Image ${i + 1} failed:`, imgErr.message);
+                console.log(`Image ${i + 1} failed, trying next...`);
+                continue;
             }
         }
 
-        // Success reaction
+        if (sentCount === 0) {
+            return reply("❌ Could not download any images. Try different query.");
+        }
+
         await conn.sendMessage(from, { react: { text: "✅", key: m.key } });
 
     } catch (error) {
-        console.error('Full Error:', error);
+        console.error('Error:', error.message);
         await conn.sendMessage(from, { react: { text: "❌", key: m.key } });
         reply(`⚠️ Error: ${error.message}`);
     }
