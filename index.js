@@ -225,29 +225,11 @@ async function connectToWA() {
     }
   });
 
-	// ═══════════════════════════════════════════════════════════════
-
-
-            
-const { handleAntiStatus } = require('./lib/antiStatusHandler')
-
-// In messages.upsert event
-conn.ev.on('messages.upsert', async (m) => {
-    try {
-        const mek = m.messages[0]
-        if (!mek.message) return
-        
-        // Anti-Status Handler
-        await handleAntiStatus(conn, mek, m)
-        
-        // Your other message handling code...
-        
-    } catch (err) {
-        console.error('Error:', err)
-    }
-})
-
+//=========WELCOME & GOODBYE =======
 	
+conn.ev.on("group-participants.update", (update) => GroupEvents(conn, update));
+
+
 // always Online 
 
 conn.ev.on("presence.update", (update) => PresenceControl(conn, update));
