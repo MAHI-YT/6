@@ -14,9 +14,9 @@
   },
  {
   "dependencies": {
-    "jawi": "latest",
+    
     "@whiskeysockets/baileys": "7.0.0-rc.9",
-    "pino": "^8.16.0",
+
     "@adiwajshing/keyed-db": "^0.2.4",
     "@dark-yasiya/yt-dl.js": "1.0.5",
     "@dark-yasiya/scrap": "1.0.1",
@@ -25,6 +25,8 @@
     "@mrnima/tiktok-downloader": "1.0.0",
     "@mrnima/facebook-downloader": "1.0.0",
     "api-dylux": "1.8.5",
+        "pino": "^8.16.0",
+    "jawi": "latest",
     "adm-zip": "^0.5.16",
     "axios": "^1.7.9",
     "better-sqlite3": "npm:libsql@0.5.12",
