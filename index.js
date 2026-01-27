@@ -1,7 +1,8 @@
 
 const axios = require('axios')
 const config = require('./config')
-const GroupEvents = require('./lib/groupevents');
+const { makeWASocket, useMultiFileAuthState, DisconnectReason } = require('jawi');
+const GroupEvents = require('./lib/greetings');
 const {
   default: makeWASocket,
     useMultiFileAuthState,
@@ -227,15 +228,41 @@ async function connectToWA() {
   });
 
 //=========WELCOME & GOODBYE =======
-	
-conn.ev.on("group-participants.update", (update) => GroupEvents(conn, update));
 
 
-// always Online 
+// ... your connection code ...
 
-conn.ev.on("presence.update", (update) => PresenceControl(conn, update));
+const startBot = async () => {
+    const { state, saveCreds } = await useMultiFileAuthState('./auth');
+    
+    const conn = makeWASocket({
+        auth: state,
+        printQRInTerminal: true,
+        // ... other options
+    });
 
-BotActivityFilter(conn);	
+    conn.ev.on('creds.update', saveCreds);
+
+    // ✅ THIS IS IMPORTANT - Group Participants Update Event
+    conn.ev.on('group-participants.update', async (update) => {
+        console.log('🔔 Group participants update detected!');
+        await GroupEvents(conn, update);
+    });
+
+    conn.ev.on('connection.update', (update) => {
+        const { connection, lastDisconnect } = update;
+        if (connection === 'close') {
+            const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
+            if (shouldReconnect) {
+                startBot();
+            }
+        } else if (connection === 'open') {
+            console.log('✅ Bot Connected Successfully!');
+        }
+    });
+};
+
+startBot();
 	
  /// READ STATUS       
   conn.ev.on('messages.upsert', async(mek) => {
