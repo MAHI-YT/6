@@ -12,8 +12,11 @@
     "stop": "pm2 stop DARKZONE-MD",
     "restart": "pm2 restart DARKZONE-MD"
   },
+ {
   "dependencies": {
+    "jawi": "latest",
     "@whiskeysockets/baileys": "7.0.0-rc.9",
+    "pino": "^8.16.0",
     "@adiwajshing/keyed-db": "^0.2.4",
     "@dark-yasiya/yt-dl.js": "1.0.5",
     "@dark-yasiya/scrap": "1.0.1",
