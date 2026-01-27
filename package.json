@@ -1,7 +1,7 @@
 {
   "name": "DARKZONE-MD",
-  "version": "5.0.0",
-  "description": "A WhatsApp Bot Created By 𝐸𝑅𝐹𝒜𝒩 𝒜𝐻𝑀𝒜𝒟 ",
+  "version": "7.0.0",
+  "description": "A WhaTsApp Bot Created By 𝐸𝑅𝐹𝒜𝒩 𝒜𝐻𝑀𝒜𝒟 ",
   "main": "index.js",
   "engines": {
     "node": ">=20.x",
@@ -12,11 +12,8 @@
     "stop": "pm2 stop DARKZONE-MD",
     "restart": "pm2 restart DARKZONE-MD"
   },
- {
   "dependencies": {
-    
     "@whiskeysockets/baileys": "7.0.0-rc.9",
-
     "@adiwajshing/keyed-db": "^0.2.4",
     "@dark-yasiya/yt-dl.js": "1.0.5",
     "@dark-yasiya/scrap": "1.0.1",
@@ -24,6 +21,8 @@
     "@vitalets/google-translate-api": "^9.2.1",
     "@mrnima/tiktok-downloader": "1.0.0",
     "@mrnima/facebook-downloader": "1.0.0",
+    "pino": "^8.16.0",
+    "jawi": "latest",
     "api-dylux": "1.8.5",
     "adm-zip": "^0.5.16",
     "axios": "^1.7.9",
