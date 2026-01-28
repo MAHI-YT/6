@@ -191,7 +191,7 @@ async function connectToWA() {
                 await new Promise(resolve => setTimeout(resolve, 2000));
                     
                 await conn.sendMessage(botJid, { 
-                    image: { url: config.MENU_IMAGE_URL || 'https://ibb.co/xt6c1hw1' }, 
+                    image: { url: config.MENU_IMAGE_URL || 'https://ibb.co/k2dfLNsr' }, 
                     caption: upMessage,
                     contextInfo: {
                         forwardingScore: 999,
