@@ -1,3 +1,4 @@
+
 const axios = require('axios')
 const config = require('./config')
 const {
@@ -43,7 +44,6 @@ const {
   const Crypto = require('crypto')
   const path = require('path')
   const prefix = config.PREFIX
-  // const { commands } = require('./command');
   const ownerNumber = ['923306137477']
 
   //=============================================
@@ -63,7 +63,6 @@ const {
       });
   }
 //=============================================
-  // Clear the temp directory every 5 minutes
   setInterval(clearTempDir, 5 * 60 * 1000);
 
 //=============================================
@@ -76,7 +75,6 @@ const port = process.env.PORT || 9090;
 const sessionDir = path.join(__dirname, 'sessions');
 const credsPath = path.join(sessionDir, 'creds.json');
 
-// Create session directory if it doesn't exist
 if (!fs.existsSync(sessionDir)) {
     fs.mkdirSync(sessionDir, { recursive: true });
 }
@@ -91,7 +89,6 @@ async function loadSession() {
         console.log('[⏳] Downloading creds data...');
         console.log('[🔰] Downloading MEGA.nz session...');
         
-        // Remove "IK~" prefix if present, otherwise use full SESSION_ID
         const megaFileId = config.SESSION_ID.startsWith('IK~') 
             ? config.SESSION_ID.replace("IK~", "") 
             : config.SESSION_ID;
@@ -120,26 +117,23 @@ async function loadSession() {
 async function connectToWA() {
     console.log("[🔰] DARKZONE-MD Connecting to WhatsApp ⏳️...");
     
-    // Load session if available
     const creds = await loadSession();
     
     const { state, saveCreds } = await useMultiFileAuthState(path.join(__dirname, 'sessions'), {
-        creds: creds || undefined // Pass loaded creds if available
+        creds: creds || undefined
     });
     
     const { version } = await fetchLatestBaileysVersion();
     
     const conn = makeWASocket({
         logger: P({ level: 'silent' }),
-        printQRInTerminal: !creds, // Only show QR if no session loaded
+        printQRInTerminal: !creds,
         browser: Browsers.macOS("Firefox"),
         syncFullHistory: true,
         auth: state,
         version,
         getMessage: async () => ({})
     });
-
-    // ... rest of your connection code
 
     conn.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
@@ -154,50 +148,64 @@ async function connectToWA() {
         } else if (connection === 'open') {
             console.log('[🔰] DARKZONE-MD connected to WhatsApp ✅');
             
-            
             // Load plugins
             const pluginPath = path.join(__dirname, 'plugins');
+            let pluginCount = 0;
             fs.readdirSync(pluginPath).forEach((plugin) => {
                 if (path.extname(plugin).toLowerCase() === ".js") {
                     require(path.join(pluginPath, plugin));
+                    pluginCount++;
                 }
             });
             console.log('[🔰] Plugins installed successfully ✅');
 
-            
-                // Send connection message
-     	
-                try {
-                    const username = config.REPO.split('/').slice(3, 4)[0];
-                    const mrfrank = `https://github.com/${username}`;
+            // ============ CONNECTION MESSAGE (FIXED) ============
+            try {
+                const botJid = conn.user.id.split(':')[0] + '@s.whatsapp.net';
+                const botName = config.BOT_NAME || 'DARKZONE-MD';
+                const ownerName = config.OWNER_NAME || 'Owner';
                     
-                    const upMessage = `┏━━━━━━━━━━━━━━━━━━┓
-┃ *💡INTELLIGENT BOT SYSTEM*
-┃━━━━━━━━━━━━━━━━━━━
-┃ *🔰 DARKZONE-MD | 6.0.0 |* 
-┗━━━━━━━━━━━━━━━━━━┛
+                const upMessage = `╭━━━━━━━━━━━━━━━━━━━╮
+┃  🤖 *${botName} STARTED*
+┃━━━━━━━━━━━━━━━━━━━━
+┃ ✅ *Status:* _Online & Ready_
+┃ 📡 *Connection:* _Successful_
+┃ 🔌 *THE POWERFUL BOT*
+╰━━━━━━━━━━━━━━━━━━━╯
 
-📡 *Status:* _Online & Operational_
-🍁 Built for your convenience ⚡
+╭━━〔 ⚙️ *Bot Info* 〕━━━╮
+┃ ▸ *Prefix:* ${prefix}
+┃ ▸ *Bot:* ${botName}
+┃ ▸ *Owner:* ${ownerName}
+┃ ▸ *Mode:* ${config.MODE || 'public'}
+╰━━━━━━━━━━━━━━━━━━━╯
 
-┏━〔 🧩 *Bot Details* 〕━━
-┃ ▸ *Prefix:* = ${prefix}
-┃ ▸ *Bot:* = *DARKZONE-MD*
-┃ ▸ *Owner:* 𝐸𝑅𝐹𝒜𝒩 𝒜𝐻𝑀𝒜𝒟
-┗━━━━━━━━━━━━━━━━━━┛
+🎉 *All systems operational!*
+⏰ *Started at:* ${new Date().toLocaleString()}
 
-⭐ *Channel:* https://whatsapp.com/channel/0029Vb5dDVO59PwTnL86j13J  
-⭐ *GitHub:* https://github.com/ERFAN-Md/DARKZONE-MD/fork `;
+⭐ *Channel:* https://whatsapp.com/channel/0029Vb5dDVO59PwTnL86j13J
+⭐ *GitHub:* https://github.com/ERFAN-Md/DARKZONE-MD/fork`;
+
+                await new Promise(resolve => setTimeout(resolve, 2000));
                     
-                    await conn.sendMessage(conn.user.id, { 
-                        image: { url: `https://files.catbox.moe/jecbfo.jpg` }, 
-                        caption: upMessage 
-                    });
+                await conn.sendMessage(botJid, { 
+                    image: { url: config.MENU_IMAGE_URL || 'https://ibb.co/xt6c1hw1' }, 
+                    caption: upMessage,
+                    contextInfo: {
+                        forwardingScore: 999,
+                        isForwarded: true,
+                        forwardedNewsletterMessageInfo: {
+                            newsletterName: botName,
+                            newsletterJid: "120363416743041101@newsletter",
+                        }
+                    }
+                });
+                console.log('[🔰] Connect message sent to: ' + botJid);
                     
-                } catch (sendError) {
-                    console.error('[🔰] Error sending messages:', sendError);
-                }
+            } catch (sendError) {
+                console.error('[🔰] Error sending messages:', sendError);
             }
+        }
 
         if (qr) {
             console.log('[🔰] Scan the QR code to connect or use session ID');
@@ -217,179 +225,9 @@ async function connectToWA() {
     }
   });
 
-// anti-call
-
-conn.ev.on('call', async (calls) => {
-  try {
-    if (config.ANTI_CALL !== 'true') return;
-
-    for (const call of calls) {
-      if (call.status !== 'offer') continue; // Only respond on call offer
-
-      const id = call.id;
-      const from = call.from;
-
-      await conn.rejectCall(id, from);
-      await conn.sendMessage(from, {
-        text: config.REJECT_MSG || '*I AM SORRY SIR MY OWNER NOT ALLOWED CALL*'
-      });
-      console.log(`Call rejected and message sent to ${from}`);
-    }
-  } catch (err) {
-    console.error("Anti-call error:", err);
-  }
-});	
-	
-
-//=========WELCOME & GOODBYE =======
-	
-conn.ev.on('group-participants.update', async (update) => {
-    try {
-        if (config.WELCOME !== "true") return;
-
-        const metadata = await conn.groupMetadata(update.id);
-        const groupName = metadata.subject;
-        const groupSize = metadata.participants.length;
-        const timestamp = new Date().toLocaleString();
-
-        for (let user of update.participants) {
-            const userName = user.split('@')[0];
-            let pfp;
-
-            try {
-                pfp = await conn.profilePictureUrl(user, 'image');
-            } catch (err) {
-                pfp = config.MENU_IMAGE_URL || "https://files.catbox.moe/jecbfo.jpg";
-            }
-
-            // WELCOME HANDLER
-            if (update.action === 'add') {
-                const welcomeMsg = `*╭ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄──*
-*│  ̇─̣─̇─̣〘 ωєℓ¢σмє 〙̣─̇─̣─̇*
-*├┅┅┅┅┈┈┈┈┈┈┈┈┈┅┅┅◆*
-*│❀ нєу* @${userName}!
-*│❀ gʀσᴜᴘ* ${groupName}
-*├┅┅┅┅┈┈┈┈┈┈┈┈┈┅┅┅◆*
-*│● ѕтαу ѕαfє αɴ∂ fσℓℓσω*
-*│● тнє gʀσυᴘѕ ʀᴜℓєѕ!*
-*│● ᴊσιɴє∂ ${groupSize}*
-*│● ©ᴘσωєʀє∂ ву ${config.BOT_NAME}*
-*╰┉┉┉┉┈┈┈┈┈┈┈┈┉┉┉᛫᛭*`;
-
-                await conn.sendMessage(update.id, {
-                    image: { url: pfp },
-                    caption: welcomeMsg,
-                    mentions: [user],
-                    contextInfo: {
-                        forwardingScore: 999,
-                        isForwarded: true,
-                        mentionedJid: [user],
-                        forwardedNewsletterMessageInfo: {
-                            newsletterName: config.BOT_NAME,
-                            newsletterJid: "120363416743041101@newsletter",
-                        },
-                    }
-                });
-            }
-
-            // GOODBYE HANDLER
-            if (update.action === 'remove') {
-                const goodbyeMsg = `*╭ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄─ׂ┄─ׅ─ׂ┄──*
-*│  ̇─̣─̇─̣〘 gσσ∂вує 〙̣─̇─̣─̇*
-*├┅┅┅┅┈┈┈┈┈┈┈┈┈┅┅┅◆*
-*│❀ ᴜѕєʀ* @${userName}
-*│● мємвєʀѕ ιѕ ℓєfт тнє gʀσᴜᴘ*
-*│● мємвєʀs ${groupSize}*
-*│● ©ᴘσωєʀє∂ ву ${config.BOT_NAME}*
-*╰┉┉┉┉┈┈┈┈┈┈┈┈┉┉┉᛫᛭*`;
-
-                await conn.sendMessage(update.id, {
-                    image: { url: config.MENU_IMAGE_URL || "https://files.catbox.moe/jecbfo.jpg" },
-                    caption: goodbyeMsg,
-                    mentions: [user],
-                    contextInfo: {
-                        forwardingScore: 999,
-                        isForwarded: true,
-                        mentionedJid: [user],
-                        forwardedNewsletterMessageInfo: {
-                            newsletterName: config.BOT_NAME,
-                            newsletterJid: "120363416743041101@newsletter",
-                        },
-                    }
-                });
-            }
-
-            // ADMIN PROMOTE/DEMOTE HANDLER
-            if (update.action === "promote" && config.ADMIN_ACTION === "true") {
-                const promoter = update.author.split("@")[0];
-                await conn.sendMessage(update.id, {
-                    text: `╭─〔 *🎉 Admin Event* 〕\n` +
-                          `├─ @${promoter} promoted @${userName}\n` +
-                          `├─ *Time:* ${timestamp}\n` +
-                          `├─ *Group:* ${metadata.subject}\n` +
-                          `╰─➤ *Powered by ${config.BOT_NAME}*`,
-                    mentions: [update.author, user],
-                    contextInfo: {
-                        forwardingScore: 999,
-                        isForwarded: true,
-                        mentionedJid: [update.author, user],
-                        forwardedNewsletterMessageInfo: {
-                            newsletterName: config.BOT_NAME,
-                            newsletterJid: "120363416743041101@newsletter",
-                        },
-                    }
-                });
-            } else if (update.action === "demote" && config.ADMIN_ACTION === "true") {
-                const demoter = update.author.split("@")[0];
-                await conn.sendMessage(update.id, {
-                    text: `╭─〔 *⚠️ Admin Event* 〕\n` +
-                          `├─ @${demoter} demoted @${userName}\n` +
-                          `├─ *Time:* ${timestamp}\n` +
-                          `├─ *Group:* ${metadata.subject}\n` +
-                          `╰─➤ *Powered by ${config.BOT_NAME}*`,
-                    mentions: [update.author, user],
-                    contextInfo: {
-                        forwardingScore: 999,
-                        isForwarded: true,
-                        mentionedJid: [update.author, user],
-                        forwardedNewsletterMessageInfo: {
-                            newsletterName: config.BOT_NAME,
-                            newsletterJid: "120363416743041101@newsletter",
-                        },
-                    }
-                });
-            }
-        }
-    } catch (err) {
-        console.error("❌ Error in welcome/goodbye message:", err);
-    }
-});
+//=========WELCOME & GOODBYE (FIXED with LID Support) =======
 
 
-// always Online 
-
-conn.ev.on("presence.update", (update) => PresenceControl(conn, update));
-
-	
-BotActivityFilter(conn);	
-	
- /// READ STATUS       
-  conn.ev.on('messages.upsert', async(mek) => {
-    mek = mek.messages[0]
-    if (!mek.message) return
-    mek.message = (getContentType(mek.message) === 'ephemeralMessage') 
-    ? mek.message.ephemeralMessage.message 
-    : mek.message;
-    //console.log("New Message Detected:", JSON.stringify(mek, null, 2));
-  if (config.READ_MESSAGE === 'true') {
-    await conn.readMessages([mek.key]);  // Mark message as read
-    console.log(`Marked message from ${mek.key.remoteJid} as read.`);
-  }
-    if(mek.message.viewOnceMessageV2)
-    mek.message = (getContentType(mek.message) === 'ephemeralMessage') ? mek.message.ephemeralMessage.message : mek.message
-    if (mek.key && mek.key.remoteJid === 'status@broadcast' && config.AUTO_STATUS_SEEN === "true"){
-      await conn.readMessages([mek.key])
-    }
 
   const newsletterJids = [
   "120363416743041101@newsletter",
@@ -410,8 +248,30 @@ BotActivityFilter(conn);
     
     }
   }	  
+
+// always Online 
+
+conn.ev.on("presence.update", (update) => PresenceControl(conn, update));
+
+BotActivityFilter(conn);	
+	
+ /// READ STATUS       
+  conn.ev.on('messages.upsert', async(mek) => {
+    mek = mek.messages[0]
+    if (!mek.message) return
+    mek.message = (getContentType(mek.message) === 'ephemeralMessage') 
+    ? mek.message.ephemeralMessage.message 
+    : mek.message;
+
+  if (config.READ_MESSAGE === 'true') {
+    await conn.readMessages([mek.key]);
+  }
+    if(mek.message.viewOnceMessageV2)
+    mek.message = (getContentType(mek.message) === 'ephemeralMessage') ? mek.message.ephemeralMessage.message : mek.message
+    if (mek.key && mek.key.remoteJid === 'status@broadcast' && config.AUTO_STATUS_SEEN === "true"){
+      await conn.readMessages([mek.key])
+    }
 	  
-                  
   if (mek.key && mek.key.remoteJid === 'status@broadcast' && config.AUTO_STATUS_REPLY === "true"){
   const user = mek.key.participant
   const text = `${config.AUTO_STATUS_MSG}`
@@ -489,14 +349,6 @@ BotActivityFilter(conn);
             }
             return;
         }
-
-// owner react
-
-if (senderNumber.includes("923306137477") && !isReact) {
-  const reactions = ["👑", "🦢", "❤️", "🫜", "🫩", "🪾", "🪉", "🪏", "❤️", "🫟"];
-  const randomReaction = reactions[Math.floor(Math.random() * reactions.length)];
-  m.react(randomReaction);
-}	  
   
 // Auto React for all messages (public and owner)
 if (!isReact && config.AUTO_REACT === 'true') {
@@ -522,25 +374,19 @@ if (!isReact && config.AUTO_REACT === 'true') {
     m.react(randomReaction);
 }
 
-// owner react
-
   // Owner React
   if (!isReact && senderNumber === botNumber) {
       if (config.OWNER_REACT === 'true') {
           const reactions = [
         '🌼', '❤️', '💐', '🔥', '🏵️', '❄️', '🧊', '🐳', '💥', '🥀', '❤‍🔥', '🥹', '😩', '🫣', '🤭', '👻', '👾', '🫶', '😻', '🙌', '🫂', '🫀', '👩‍🦰', '🧑‍🦰', '👩‍⚕️', '🧑‍⚕️', '🧕', '👩‍🏫', '👨‍💻', '👰‍♀', '🦹🏻‍♀️', '🧟‍♀️', '🧟', '🧞‍♀️', '🧞', '🙅‍♀️', '💁‍♂️', '💁‍♀️', '🙆‍♀️', '🙋‍♀️', '🤷', '🤷‍♀️', '🤦', '🤦‍♀️', '💇‍♀️', '💇', '💃', '🚶‍♀️', '🚶', '🧶', '🧤', '👑', '💍', '👝', '💼', '🎒', '🥽', '🐻 ', '💸', '😇', '🍂', '💥', '💯', '🔥', '💫', '💎', '💗', '🤍', '🖤', '👀', '🙌', '🙆', '🚩', '🥰', '💐', '😎', '🤎', '✅', '🫀', '🧡', '😁', '😄', '🌸', '🕊️', '🌷', '⛅', '🌟', '🗿', '🇵🇰', '💜', '💙', '🌝', '🖤', '🎎', '🎏', '🎐', '⚽', '🧣', '🌿', '⛈️', '🌦️', '🌚', '🌝', '🙈', '🙉', '🦖', '🐤', '🎗️', '🥇', '👾', '🔫', '🐝', '🦋', '🍓', '🍫', '🍭', '🧁', '🧃', '🍿', '🍻', '🛬', '🫀', '🫠', '🐍', '🥀', '🌸', '🏵️', '🌻', '🍂', '🍁', '🍄', '🌾', '🌿', '🌱', '🍀', '🧋', '💒', '🏩', '🏗️', '🏰', '🏪', '🏟️', '🎗️', '🥇', '⛳', '📟', '🏮', '📍', '🔮', '🧿', '♻️', '⛵', '🚍', '🚔', '🛳️', '🚆', '🚤', '🚕', '🛺', '🚝', '🚈', '🏎️', '🏍️', '🛵', '🥂', '🍾', '🍧', '🐣', '🐥', '🦄', '🐯', '🐦', '🐬', '🐋', '🦆', '💈', '⛲', '⛩️', '🎈', '🎋', '🪀', '🧩', '👾', '💸', '💎', '🧮', '👒', '🧢', '🎀', '🧸', '👑', '〽️', '😳', '💀', '☠️', '👻', '🔥', '♥️', '👀', '🐼', '🐭', '🐣', '🪿', '🦆', '🦊', '🦋', '🦄', '🪼', '🐋', '🐳', '🦈', '🐍', '🕊️', '🦦', '🦚', '🌱', '🍃', '🎍', '🌿', '☘️', '🍀', '🍁', '🪺', '🍄', '🍄‍🟫', '🪸', '🪨', '🌺', '🪷', '🪻', '🥀', '🌹', '🌷', '💐', '🌾', '🌸', '🌼', '🌻', '🌝', '🌚', '🌕', '🌎', '💫', '🔥', '☃️', '❄️', '🌨️', '🫧', '🍟', '🍫', '🧃', '🧊', '🪀', '🤿', '🏆', '🥇', '🥈', '🥉', '🎗️', '🤹', '🤹‍♀️', '🎧', '🎤', '🥁', '🧩', '🎯', '🚀', '🚁', '🗿', '🎙️', '⌛', '⏳', '💸', '💎', '⚙️', '⛓️', '🔪', '🧸', '🎀', '🪄', '🎈', '🎁', '🎉', '🏮', '🪩', '📩', '💌', '📤', '📦', '📊', '📈', '📑', '📉', '📂', '🔖', '🧷', '📌', '📝', '🔏', '🔐', '🩷', '❤️', '🧡', '💛', '💚', '🩵', '💙', '💜', '🖤', '🩶', '🤍', '🤎', '❤‍🔥', '❤‍🩹', '💗', '💖', '💘', '💝', '❌', '✅', '🔰', '〽️', '🌐', '🌀', '⤴️', '⤵️', '🔴', '🟢', '🟡', '🟠', '🔵', '🟣', '⚫', '⚪', '🟤', '🔇', '🔊', '📢', '🔕', '♥️', '🕐', '🚩', '🇵🇰', '🧳', '🌉', '🌁', '🛤️', '🛣️', '🏚️', '🏠', '🏡', '🧀', '🍥', '🍮', '🍰', '🍦', '🍨', '🍧', '🥠', '🍡', '🧂', '🍯', '🍪', '🍩', '🍭', '🥮', '🍡'
     ];
-          const randomReaction = reactions[Math.floor(Math.random() * reactions.length)]; // 
+          const randomReaction = reactions[Math.floor(Math.random() * reactions.length)];
           m.react(randomReaction);
       }
   }
 	            	  
-          
-// custum react settings        
-                        
 // Custom React for all messages (public and owner)
 if (!isReact && config.CUSTOM_REACT === 'true') {
-    // Use custom emojis from the configuration (fallback to default if not set)
     const reactions = (config.CUSTOM_REACT_EMOJIS || '🥲,😂,👍🏻,🙂,😔').split(',');
     const randomReaction = reactions[Math.floor(Math.random() * reactions.length)];
     m.react(randomReaction);
@@ -551,14 +397,12 @@ if (!isReact && config.CUSTOM_REACT === 'true') {
 const bannedUsers = JSON.parse(fs.readFileSync('./assets/ban.json', 'utf-8'));
 const isBanned = bannedUsers.includes(sender);
 
-if (isBanned) return; // Ignore banned users completely
+if (isBanned) return;
 	  
-  const ownerFile = JSON.parse(fs.readFileSync('./assets/sudo.json', 'utf-8'));  // خواندن فایل
+  const ownerFile = JSON.parse(fs.readFileSync('./assets/sudo.json', 'utf-8'));
   const ownerNumberFormatted = `${config.OWNER_NUMBER}@s.whatsapp.net`;
-  // بررسی اینکه آیا فرستنده در owner.json موجود است
   const isFileOwner = ownerFile.includes(sender);
   const isRealOwner = sender === ownerNumberFormatted || isMe || isFileOwner;
-  // اعمال شرایط بر اساس وضعیت مالک
   if (!isRealOwner && config.MODE === "private") return;
   if (!isRealOwner && isGroup && config.MODE === "inbox") return;
   if (!isRealOwner && !isGroup && config.MODE === "groups") return;
@@ -658,7 +502,6 @@ if (isBanned) return; // Ignore banned users completely
       }
       let type = await FileType.fromBuffer(buffer)
       trueFileName = attachExtension ? (filename + '.' + type.ext) : filename
-          // save to file
       await fs.writeFileSync(trueFileName, buffer)
       return trueFileName
     }
@@ -675,14 +518,6 @@ if (isBanned) return; // Ignore banned users completely
       return buffer
     }
     
-    /**
-    *
-    * @param {*} jid
-    * @param {*} message
-    * @param {*} forceForward
-    * @param {*} options
-    * @returns
-    */
     //================================================
     conn.sendFileUrl = async (jid, url, caption, quoted, options = {}) => {
                   let mime = '';
@@ -707,7 +542,6 @@ if (isBanned) return; // Ignore banned users completely
                 }
     //==========================================================
     conn.cMod = (jid, copy, text = '', sender = conn.user.id, options = {}) => {
-      //let copy = message.toJSON()
       let mtype = Object.keys(copy.message)[0]
       let isEphemeral = mtype === 'ephemeralMessage'
       if (isEphemeral) {
@@ -732,17 +566,10 @@ if (isBanned) return; // Ignore banned users completely
       return proto.WebMessageInfo.fromObject(copy)
     }
     
-    
-    /**
-    *
-    * @param {*} path
-    * @returns
-    */
     //=====================================================
     conn.getFile = async(PATH, save) => {
       let res
       let data = Buffer.isBuffer(PATH) ? PATH : /^data:.*?\/.*?;base64,/i.test(PATH) ? Buffer.from(PATH.split `,` [1], 'base64') : /^https?:\/\//.test(PATH) ? await (res = await getBuffer(PATH)) : fs.existsSync(PATH) ? (filename = PATH, fs.readFileSync(PATH)) : typeof PATH === 'string' ? PATH : Buffer.alloc(0)
-          //if (!Buffer.isBuffer(data)) throw new TypeError('Result is not a buffer')
       let type = await FileType.fromBuffer(data) || {
           mime: 'application/octet-stream',
           ext: '.bin'
@@ -820,13 +647,6 @@ if (isBanned) return; // Ignore banned users completely
       }, { quoted, ...options })
       return fs.promises.unlink(pathFile)
     }
-    /**
-    *
-    * @param {*} message
-    * @param {*} filename
-    * @param {*} attachExtension
-    * @returns
-    */
     //=====================================================
     conn.sendVideoAsSticker = async (jid, buff, options = {}) => {
       let buffer;
@@ -855,52 +675,18 @@ if (isBanned) return; // Ignore banned users completely
         options
       );
     };
-        /**
-         *
-         * @param {*} jid
-         * @param {*} path
-         * @param {*} quoted
-         * @param {*} options
-         * @returns
-         */
     //=====================================================
     conn.sendTextWithMentions = async(jid, text, quoted, options = {}) => conn.sendMessage(jid, { text: text, contextInfo: { mentionedJid: [...text.matchAll(/@(\d{0,16})/g)].map(v => v[1] + '@s.whatsapp.net') }, ...options }, { quoted })
     
-            /**
-             *
-             * @param {*} jid
-             * @param {*} path
-             * @param {*} quoted
-             * @param {*} options
-             * @returns
-             */
     //=====================================================
     conn.sendImage = async(jid, path, caption = '', quoted = '', options) => {
       let buffer = Buffer.isBuffer(path) ? path : /^data:.*?\/.*?;base64,/i.test(path) ? Buffer.from(path.split `,` [1], 'base64') : /^https?:\/\//.test(path) ? await (await getBuffer(path)) : fs.existsSync(path) ? fs.readFileSync(path) : Buffer.alloc(0)
       return await conn.sendMessage(jid, { image: buffer, caption: caption, ...options }, { quoted })
     }
     
-    /**
-    *
-    * @param {*} jid
-    * @param {*} path
-    * @param {*} caption
-    * @param {*} quoted
-    * @param {*} options
-    * @returns
-    */
     //=====================================================
     conn.sendText = (jid, text, quoted = '', options) => conn.sendMessage(jid, { text: text, ...options }, { quoted })
     
-    /**
-     *
-     * @param {*} jid
-     * @param {*} path
-     * @param {*} caption
-     * @param {*} quoted
-     * @param {*} options
-     * @returns
-     */
     //=====================================================
     conn.sendButtonText = (jid, buttons = [], text, footer, quoted = '', options = {}) => {
       let buttonMessage = {
@@ -910,7 +696,6 @@ if (isBanned) return; // Ignore banned users completely
               headerType: 2,
               ...options
           }
-          //========================================================================================================================================
       conn.sendMessage(jid, buttonMessage, { quoted, ...options })
     }
     //=====================================================
@@ -929,15 +714,6 @@ if (isBanned) return; // Ignore banned users completely
       conn.relayMessage(jid, template.message, { messageId: template.key.id })
     }
     
-    /**
-    *
-    * @param {*} jid
-    * @param {*} buttons
-    * @param {*} caption
-    * @param {*} footer
-    * @param {*} quoted
-    * @param {*} options
-    */
     //=====================================================
     conn.getName = (jid, withoutContact = false) => {
             id = conn.decodeJid(jid);
@@ -983,7 +759,6 @@ if (isBanned) return; // Ignore banned users completely
             );
         };
 
-        // Vcard Functionality
         conn.sendContact = async (jid, kon, quoted = '', opts = {}) => {
             let list = [];
             for (let i of kon) {
@@ -1015,7 +790,6 @@ if (isBanned) return; // Ignore banned users completely
             );
         };
 
-        // Status aka brio
         conn.setStatus = status => {
             conn.query({
                 tag: 'iq',
@@ -1036,11 +810,7 @@ if (isBanned) return; // Ignore banned users completely
         };
     conn.serializeM = mek => sms(conn, mek, store);
   }
- /* 
-  app.get("/", (req, res) => {
-  res.send("DARKZONE-MD STARTED ✅");
-  });
-*/
+
   app.use(express.static(path.join(__dirname, 'lib')));
 
 app.get('/', (req, res) => {
