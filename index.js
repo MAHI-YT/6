@@ -227,7 +227,7 @@ async function connectToWA() {
     }
   });
 
-//=========WELCOME & GOODBYE 
+//=========WELCOME & GOODBYE (FIXED with LID Support) =======
 
 //=========WELCOME & GOODBYE =======
 	
