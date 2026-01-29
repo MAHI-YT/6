@@ -33,7 +33,7 @@ async (conn, mek, m, { from, reply }) => {
 
         // Send image with caption
         await conn.sendMessage(from, {
-            image: { url: `https://www.imghippo.com/i/ks5451ZE.jpg` },
+            image: { url: `https://instasize.com/p/b6e0eb0711d28a374cccff20604b472f9a2a152fbfbb388f9f2ddee66c73683f` },
             caption: formattedInfo,
             contextInfo: { 
                 mentionedJid: [m.sender],
