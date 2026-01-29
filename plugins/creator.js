@@ -15,7 +15,7 @@ async (conn, mek, m, { from, sender, reply }) => {
         const ownerInfo = {
             name: "𝐸𝑅𝐹𝒜𝒩 𝒜𝐻𝑀𝒜𝒟",
             number: "+923306137477",
-            photo: "https://files.catbox.moe/vgpwwj.jpg",
+            photo: "https://i.ibb.co/7JFd4074/Gemini-Generated-Image-qu3870qu3870qu38-processed-lightpdf-com.png",
             bio: "The creator of this amazing bot"
         };
 
