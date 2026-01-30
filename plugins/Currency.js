@@ -9,125 +9,174 @@ cmd({
     react: "🍌",
     desc: "Edit image using Nano Banana AI with custom prompt",
     category: "image",
-    use: ".nanobanana <prompt> (reply to image or provide URL)",
+    use: ".nanobanana <prompt> (reply to image)",
     filename: __filename,
 },
 async (conn, mek, m, { from, quoted, reply, args }) => {
     try {
-        const text = args.join(' ');
+        const prompt = args.join(' ');
         
         // Check if prompt is provided
-        if (!text) {
+        if (!prompt) {
             return reply(`🍌 *NANO BANANA AI EDITOR*
 
 ❗ Please provide a prompt!
 
 *Usage:*
-➤ Reply to an image with prompt
-➤ Or provide image URL with prompt
+Reply to an image with prompt
 
 *Examples:*
 • .nanobanana make it cartoon style
 • .nanobanana turn into anime
-• .nanobanana add sunglasses
-• .nanobanana make background sunset`);
+• .nanobanana add sunglasses`);
         }
 
-        let imageUrl = '';
-        let prompt = text;
-
-        // Check if URL is provided in text
-        const urlMatch = text.match(/(https?:\/\/[^\s]+\.(jpg|jpeg|png|webp|gif))/i);
-        
-        if (urlMatch) {
-            // URL provided in message
-            imageUrl = urlMatch[1];
-            prompt = text.replace(urlMatch[0], '').trim();
-            
-            if (!prompt) {
-                return reply("📝 Please provide a prompt along with the image URL!");
-            }
-            
-        } else if (quoted && quoted.imageMessage) {
-            // Image replied - download and upload
-            await reply("⏳ Uploading image to server...");
-
-            const stream = await downloadContentFromMessage(
-                quoted.imageMessage,
-                'image'
-            );
-
-            let buffer = Buffer.from([]);
-            for await (const chunk of stream) {
-                buffer = Buffer.concat([buffer, chunk]);
-            }
-
-            // Upload to temporary hosting
-            const form = new FormData();
-            form.append('file', buffer, {
-                filename: 'nanobanana.jpg',
-                contentType: 'image/jpeg'
-            });
-
-            const uploadRes = await axios.post(
-                'https://tmpfiles.org/api/v1/upload',
-                form,
-                { headers: form.getHeaders() }
-            );
-
-            imageUrl = uploadRes.data.data.url.replace(
-                'tmpfiles.org/',
-                'tmpfiles.org/dl/'
-            );
-            
-        } else {
-            return reply(`🖼️ *No image found!*
-
-Please reply to an image or provide an image URL.
-
-*Example:*
-Reply to image: .nanobanana make it anime
-With URL: .nanobanana https://example.com/photo.jpg make it cartoon`);
+        // Must reply to image
+        if (!quoted || !quoted.imageMessage) {
+            return reply("🖼️ Please reply to an image with your prompt!");
         }
 
-        await reply("🍌 Processing your image with Nano Banana AI...\n⏳ Please wait, this may take a moment...");
+        await reply("⏳ Downloading image...");
 
-        // Call Nano Banana API
-        const apiUrl = `https://api-faa.my.id/faa/nano-banana?imageUrl=${encodeURIComponent(imageUrl)}&prompt=${encodeURIComponent(prompt)}`;
+        // Download image from WhatsApp
+        const stream = await downloadContentFromMessage(
+            quoted.imageMessage,
+            'image'
+        );
 
-        const apiRes = await axios.get(apiUrl, { 
-            timeout: 120000,
-            headers: {
-                'User-Agent': 'WhatsApp-Bot/1.0'
-            }
+        let buffer = Buffer.from([]);
+        for await (const chunk of stream) {
+            buffer = Buffer.concat([buffer, chunk]);
+        }
+
+        await reply("📤 Uploading image to server...");
+
+        // Upload to tmpfiles.org
+        const form = new FormData();
+        form.append('file', buffer, {
+            filename: 'image.jpg',
+            contentType: 'image/jpeg'
         });
-        
-        const apiData = apiRes.data;
 
-        // Handle different API response structures
+        const uploadRes = await axios.post(
+            'https://tmpfiles.org/api/v1/upload',
+            form,
+            { headers: form.getHeaders() }
+        );
+
+        const imageUrl = uploadRes.data.data.url.replace(
+            'tmpfiles.org/',
+            'tmpfiles.org/dl/'
+        );
+
+        await reply("🍌 Processing with Nano Banana AI...\n⏳ Please wait...");
+
+        // METHOD 1: Try POST with JSON body
         let resultUrl = null;
         
-        if (apiData.result) {
-            resultUrl = apiData.result;
-        } else if (apiData.data?.result) {
-            resultUrl = apiData.data.result;
-        } else if (apiData.data?.url) {
-            resultUrl = apiData.data.url;
-        } else if (apiData.url) {
-            resultUrl = apiData.url;
-        } else if (apiData.image) {
-            resultUrl = apiData.image;
-        } else if (apiData.data?.image) {
-            resultUrl = apiData.data.image;
+        try {
+            const response = await axios.post(
+                'https://api-faa.my.id/faa/nano-banana',
+                {
+                    imageUrl: imageUrl,
+                    prompt: prompt
+                },
+                {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    },
+                    timeout: 120000
+                }
+            );
+            
+            const data = response.data;
+            resultUrl = data.result || data.data?.result || data.url || data.data?.url || data.image;
+            
+        } catch (e1) {
+            console.log("Method 1 failed, trying Method 2...");
+            
+            // METHOD 2: Try POST with form-urlencoded
+            try {
+                const params = new URLSearchParams();
+                params.append('imageUrl', imageUrl);
+                params.append('prompt', prompt);
+                
+                const response = await axios.post(
+                    'https://api-faa.my.id/faa/nano-banana',
+                    params,
+                    {
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'Accept': 'application/json',
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                        },
+                        timeout: 120000
+                    }
+                );
+                
+                const data = response.data;
+                resultUrl = data.result || data.data?.result || data.url || data.data?.url || data.image;
+                
+            } catch (e2) {
+                console.log("Method 2 failed, trying Method 3...");
+                
+                // METHOD 3: Try GET with proper headers
+                try {
+                    const apiUrl = `https://api-faa.my.id/faa/nano-banana?imageUrl=${encodeURIComponent(imageUrl)}&prompt=${encodeURIComponent(prompt)}`;
+                    
+                    const response = await axios.get(apiUrl, {
+                        headers: {
+                            'Accept': 'application/json',
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                            'Referer': 'https://api-faa.my.id/',
+                            'Origin': 'https://api-faa.my.id'
+                        },
+                        timeout: 120000
+                    });
+                    
+                    const data = response.data;
+                    resultUrl = data.result || data.data?.result || data.url || data.data?.url || data.image;
+                    
+                } catch (e3) {
+                    console.log("Method 3 failed, trying Method 4...");
+                    
+                    // METHOD 4: Try with different parameter names
+                    try {
+                        const response = await axios.post(
+                            'https://api-faa.my.id/faa/nano-banana',
+                            {
+                                image: imageUrl,
+                                text: prompt
+                            },
+                            {
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                                },
+                                timeout: 120000
+                            }
+                        );
+                        
+                        const data = response.data;
+                        resultUrl = data.result || data.data?.result || data.url || data.data?.url || data.image;
+                        
+                    } catch (e4) {
+                        console.log("All methods failed");
+                        console.log("Error details:", e4?.response?.data || e4.message);
+                        throw e4;
+                    }
+                }
+            }
         }
 
-        // Check if we got a result
+        // Check if we got result
         if (!resultUrl) {
-            console.log("API Response:", JSON.stringify(apiData));
-            return reply("❌ Edit failed. API returned no image.\n\nPlease try again with a different prompt.");
+            return reply("❌ API returned no image. Please try different prompt.");
         }
 
-        // Send the edited image
+        // Send edited image
         await conn.sendMessage(
             from,
             {
@@ -142,12 +191,29 @@ With URL: .nanobanana https://example.com/photo.jpg make it cartoon`);
         );
 
     } catch (err) {
-        console.error("NANO BANANA ERROR:", err?.response?.data || err.message || err);
+        console.error("NANO BANANA ERROR:", err?.response?.data || err.message);
         
-        if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
-            return reply("⏱️ Request timed out. The image might be too large or the server is busy. Please try again.");
+        const statusCode = err?.response?.status;
+        
+        if (statusCode === 403) {
+            return reply(`❌ *API Access Denied (403)*
+
+The API might be:
+• Blocked in your region
+• Requiring API key
+• Under maintenance
+
+Please check if the API is working.`);
         }
         
-        reply("❌ Image editing failed. Please try again later.\n\nError: " + (err.message || "Unknown error"));
+        if (statusCode === 404) {
+            return reply("❌ API endpoint not found. API might have changed.");
+        }
+        
+        if (statusCode === 429) {
+            return reply("⏳ Too many requests. Please wait and try again.");
+        }
+        
+        reply("❌ Failed: " + (err?.response?.data?.message || err.message));
     }
 });
