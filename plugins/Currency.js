@@ -2,56 +2,73 @@ const { cmd } = require('../command');
 const axios = require('axios');
 
 cmd({
-  pattern: "currency",
-  desc: "Convert between fiat and cryptocurrencies in real-time.",
-  category: "tools",
-  react: "💱",
-  filename: __filename
-},
-async (conn, mek, m, { text, args, reply }) => {
-  try {
-    if (args.length < 3) {
-      return reply(
-        "💱 *Usage Example:*\n\n" +
-        ".convert 100 USD IDR\n\n" +
-        "Converts 100 USD to Indonesian Rupiah (IDR)."
-      );
+    pattern: "nanobanana",
+    alias: ["banana", "nb"],
+    desc: "Change image background using Nano Banana AI",
+    category: "ai",
+    react: "🍌",
+    filename: __filename
+}, async (conn, mek, m, { from, q, reply, react }) => {
+    try {
+        if (!q) {
+            return reply(
+                "Please provide a prompt.\n\n" +
+                "Example:\n.nanobanana change the background to a beach"
+            );
+        }
+
+        let imageUrl;
+
+        // 1️⃣ If user replied to an image
+        if (m.quoted && m.quoted.message?.imageMessage) {
+            imageUrl = await conn.downloadAndSaveMediaMessage(
+                m.quoted.imageMessage,
+                'nano'
+            );
+        }
+
+        // 2️⃣ If user provided an image URL
+        if (!imageUrl && q.startsWith("http")) {
+            const parts = q.split(" ");
+            imageUrl = parts[0];
+            q = parts.slice(1).join(" ");
+        }
+
+        if (!imageUrl) {
+            return reply(
+                "Please reply to an image or provide an image URL."
+            );
+        }
+
+        await react("⏳");
+
+        // API request
+        const apiUrl = "https://api-faa.my.id/faa/nano-banana";
+
+        const response = await axios.post(
+            apiUrl,
+            {
+                image: imageUrl,
+                prompt: q
+            },
+            { responseType: "arraybuffer" }
+        );
+
+        // Send edited image back to WhatsApp
+        await conn.sendMessage(
+            from,
+            {
+                image: Buffer.from(response.data),
+                caption: "🍌 *Nano Banana Result*"
+            },
+            { quoted: mek }
+        );
+
+        await react("✅");
+
+    } catch (e) {
+        console.error("Nano Banana Error:", e);
+        await react("❌");
+        reply("Failed to process the image. Please try again later.");
     }
-
-    const [amount, from, to] = args;
-    const apiUrl = `https://api.mrfrankofc.gleeze.com/api/currency/convert?amount=${encodeURIComponent(amount)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
-
-    await reply("💹 Fetching latest conversion rates...");
-
-    const res = await axios.get(apiUrl, { timeout: 15000 });
-
-    if (!res || !res.data) {
-      return reply("❌ No response from Currency API. Please try again later.");
-    }
-
-    if (res.data.status === false) {
-      const err = res.data.error || "Conversion failed.";
-      return reply(`❌ *API Error:* ${err}`);
-    }
-
-    const data = res.data.data;
-    const resultText = 
-`💱 *Currency Conversion Result*
-
-💰 *Amount:* ${data.amount} ${data.from}
-➡️ *Converted To:* ${data.to}
-📈 *Exchange Rate:* ${data.rate.toLocaleString()}
-💵 *Result:* ${data.result.toLocaleString()} ${data.to}
-
-⏰ *Updated:* ${new Date(data.timestamp).toLocaleString()}
-
-~ DARKZONE-MD`;
-
-    await conn.sendMessage(m.chat, { text: resultText }, { quoted: mek });
-
-  } catch (err) {
-    console.error("Currency Convert Error:", err);
-    if (err.code === "ECONNABORTED") return reply("❌ Request timed out. Please try again later.");
-    return reply("❌ Failed to connect to Currency API. Please try again later.");
-  }
 });
