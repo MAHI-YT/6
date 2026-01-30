@@ -1,92 +1,186 @@
 const { cmd } = require('../command');
+const yts = require('yt-search');
 const axios = require('axios');
 
 cmd({
-    pattern: "ai",
-    alias: ["bot", "dj", "gpt", "gpt4", "bing"],
-    desc: "Chat with an AI model",
-    category: "ai",
-    react: "🤖",
+    pattern: "status",
+    alias: ["wstatus", "whatsappstatus", "wsstatus", "ws"],
+    desc: "Download WhatsApp Status videos by category",
+    category: "download",
+    react: "📱",
     filename: __filename
-},
-async (conn, mek, m, { from, args, q, reply, react }) => {
+}, async (conn, mek, m, { from, q, reply }) => {
     try {
-        if (!q) return reply("Please provide a message for the AI.\nExample: `.ai Hello`");
+        // Categories with search queries for short status videos
+        const categories = {
+            "islam": [
+                "islamic whatsapp status short",
+                "quran status video 30 sec",
+                "islamic reminder status",
+                "allah status video short",
+                "naat status video",
+                "islamic quotes status",
+                "jumma mubarak status"
+            ],
+            "sad": [
+                "sad whatsapp status",
+                "sad song status 30 sec",
+                "broken heart status",
+                "sad poetry status urdu",
+                "emotional sad status",
+                "sad shayari status",
+                "tanha status video"
+            ],
+            "song": [
+                "hindi song whatsapp status",
+                "punjabi song status 30 sec",
+                "indian song status",
+                "bollywood status video",
+                "romantic song status",
+                "new hindi song status",
+                "trending song status"
+            ],
+            "motivation": [
+                "motivation whatsapp status",
+                "motivational quotes status",
+                "success motivation status short",
+                "gym motivation status",
+                "life motivation status",
+                "study motivation status",
+                "never give up status"
+            ],
+            "love": [
+                "love whatsapp status",
+                "romantic status video 30 sec",
+                "couple status video",
+                "love song status",
+                "romantic whatsapp status",
+                "true love status"
+            ],
+            "funny": [
+                "funny whatsapp status",
+                "comedy status video short",
+                "funny video status",
+                "memes status video",
+                "comedy whatsapp status"
+            ],
+            "attitude": [
+                "attitude whatsapp status",
+                "attitude status video",
+                "boy attitude status",
+                "girl attitude status",
+                "savage attitude status",
+                "killer attitude status"
+            ],
+            "friendship": [
+                "friendship whatsapp status",
+                "friends status video",
+                "dosti status",
+                "best friend status",
+                "yaari status video"
+            ],
+            "nature": [
+                "nature whatsapp status",
+                "beautiful nature status",
+                "rain status video",
+                "sunset status video",
+                "nature aesthetic status"
+            ]
+        };
 
-        const apiUrl = `https://lance-frank-asta.onrender.com/api/gpt?q=${encodeURIComponent(q)}`;
-        const { data } = await axios.get(apiUrl);
-
-        if (!data || !data.message) {
-            await react("❌");
-            return reply("AI failed to respond. Please try again later.");
+        // Show available categories if no input
+        if (!q) {
+            let categoryList = Object.keys(categories).map((cat, index) => `${index + 1}. *${cat.toUpperCase()}*`).join('\n');
+            return await reply(`📱 *WHATSAPP STATUS DOWNLOADER*\n━━━━━━━━━━━━━━━━━━━━━\n\n📂 *Available Categories:*\n\n${categoryList}\n\n━━━━━━━━━━━━━━━━━━━━━\n📝 *Usage:* .status <category>\n📌 *Example:* .status islam\n📌 *Example:* .status motivation\n\n> *DARKZONE-MD*`);
         }
 
-        await reply(`🤖 *AI Response:*\n\n${data.message}`);
-        await react("✅");
-    } catch (e) {
-        console.error("Error in AI command:", e);
-        await react("❌");
-        reply("An error occurred while communicating with the AI.");
-    }
-});
+        const category = q.toLowerCase().trim();
 
-cmd({
-    pattern: "openai",
-    alias: ["chatgpt", "gpt3", "open-gpt"],
-    desc: "Chat with OpenAI",
-    category: "ai",
-    react: "🧠",
-    filename: __filename
-},
-async (conn, mek, m, { from, args, q, reply, react }) => {
-    try {
-        if (!q) return reply("Please provide a message for OpenAI.\nExample: `.openai Hello`");
-
-        const apiUrl = `https://vapis.my.id/api/openai?q=${encodeURIComponent(q)}`;
-        const { data } = await axios.get(apiUrl);
-
-        if (!data || !data.result) {
-            await react("❌");
-            return reply("OpenAI failed to respond. Please try again later.");
+        // Check if category exists
+        if (!categories[category]) {
+            let categoryList = Object.keys(categories).map((cat, index) => `${index + 1}. *${cat.toUpperCase()}*`).join('\n');
+            return await reply(`❌ *Invalid Category!*\n\n📂 *Available Categories:*\n\n${categoryList}\n\n📌 *Example:* .status sad`);
         }
 
-        await reply(`🧠 *OpenAI Response:*\n\n${data.result}`);
-        await react("✅");
-    } catch (e) {
-        console.error("Error in OpenAI command:", e);
-        await react("❌");
-        reply("An error occurred while communicating with OpenAI.");
-    }
-});
+        // React to show processing
+        await conn.sendMessage(from, { react: { text: '🔍', key: m.key } });
 
-cmd({
-    pattern: "deepseek",
-    alias: ["deep", "seekai"],
-    desc: "Chat with DeepSeek AI",
-    category: "ai",
-    react: "🧠",
-    filename: __filename
-},
-async (conn, mek, m, { from, args, q, reply, react }) => {
-    try {
-        if (!q) return reply("Please provide a message for DeepSeek AI.\nExample: `.deepseek Hello`");
+        // Get random search query from category
+        const searchQueries = categories[category];
+        const randomQuery = searchQueries[Math.floor(Math.random() * searchQueries.length)];
 
-        const apiUrl = `https://api.ryzendesu.vip/api/ai/deepseek?text=${encodeURIComponent(q)}`;
-        const { data } = await axios.get(apiUrl);
-
-        if (!data || !data.answer) {
-            await react("❌");
-            return reply("DeepSeek AI failed to respond. Please try again later.");
+        // Search for videos
+        const search = await yts(randomQuery);
+        if (!search.videos || search.videos.length === 0) {
+            return await reply("❌ No videos found for this category!");
         }
 
-        await reply(`🧠 *DeepSeek AI Response:*\n\n${data.answer}`);
-        await react("✅");
-    } catch (e) {
-        console.error("Error in DeepSeek AI command:", e);
-        await react("❌");
-        reply("An error occurred while communicating with DeepSeek AI.");
+        // Filter short videos (under 60 seconds for WhatsApp status)
+        const shortVideos = search.videos.filter(video => {
+            const duration = video.seconds;
+            return duration <= 60 && duration >= 5; // 5 to 60 seconds ideal for status
+        });
+
+        let videoInfo;
+
+        if (shortVideos.length === 0) {
+            // If no short videos found, take from first 15 results
+            videoInfo = search.videos[Math.floor(Math.random() * Math.min(15, search.videos.length))];
+        } else {
+            // Get random short video from filtered list
+            videoInfo = shortVideos[Math.floor(Math.random() * Math.min(10, shortVideos.length))];
+        }
+
+        // Get category emoji
+        const categoryEmojis = {
+            "islam": "🕌",
+            "sad": "😢",
+            "song": "🎵",
+            "motivation": "💪",
+            "love": "❤️",
+            "funny": "😂",
+            "attitude": "😎",
+            "friendship": "👬",
+            "nature": "🌿"
+        };
+
+        const emoji = categoryEmojis[category] || "📱";
+
+        // Send thumbnail + details before downloading
+        await conn.sendMessage(from, {
+            image: { url: videoInfo.thumbnail },
+            caption: `${emoji} *WHATSAPP STATUS*\n━━━━━━━━━━━━━━━━━━━━━\n\n🎬 *Title:* ${videoInfo.title}\n\n⏰ *Duration:* ${videoInfo.timestamp}\n👁️ *Views:* ${videoInfo.views}\n📁 *Category:* ${category.toUpperCase()}\n\n⏳ *Downloading, please wait...*\n\n> *DARKZONE-MD*`
+        }, { quoted: mek });
+
+        // React to show downloading
+        await conn.sendMessage(from, { react: { text: '⬇️', key: m.key } });
+
+        // Call JawadTech API for download
+        const api = `https://jawad-tech.vercel.app/download/ytdl?url=${encodeURIComponent(videoInfo.url)}`;
+        const res = await axios.get(api);
+        const data = res.data;
+
+        // Check API response
+        if (!data?.status || !data?.result?.mp4) {
+            return await reply("❌ Failed to fetch download link from API!");
+        }
+
+        const { mp4 } = data.result;
+
+        // Send the video
+        await conn.sendMessage(from, {
+            video: { url: mp4 },
+            mimetype: 'video/mp4',
+            fileName: `${category}_status.mp4`,
+            caption: `${emoji} *${category.toUpperCase()} STATUS*\n━━━━━━━━━━━━━━━━━━━━━\n\n🎬 *${videoInfo.title}*\n\n✅ *Download Complete!*\n\n> *DARKZONE-MD*`
+        }, { quoted: mek });
+
+        // Success reaction
+        await conn.sendMessage(from, { react: { text: '✅', key: m.key } });
+
+    } catch (err) {
+        console.error("❌ Error in .status command:", err);
+        await reply("⚠️ Something went wrong while downloading the status video!");
+        await conn.sendMessage(from, { react: { text: '❌', key: m.key } });
     }
 });
-
-
-      
