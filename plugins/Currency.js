@@ -4,111 +4,114 @@ const axios = require('axios');
 cmd({
     pattern: "nanobanana",
     alias: ["nano", "banana", "changebg", "bgchange"],
-    desc: "Change image background using AI - Reply to image or provide URL",
+    desc: "Change image background using AI",
     category: "ai",
     react: "🍌",
     filename: __filename
-}, async (conn, mek, m, { from, args, q, reply, react, quoted }) => {
+}, async (conn, mek, m, { from, args, q, reply, react }) => {
     try {
         // Check if prompt is provided
         if (!q) {
-            return reply(`❌ *Please provide a prompt!*\n\n📌 *Usage Methods:*\n\n*Method 1:* Reply to an image\n\`.nanobanana change background to beach\`\n\n*Method 2:* Provide image URL\n\`.nanobanana https://example.com/image.jpg | sunset background\``);
+            return reply(`❌ *Please provide a prompt!*\n\n📌 *Usage:*\n*Reply to image:* .nanobanana sunset beach\n*With URL:* .nanobanana url | prompt`);
         }
 
         let imageUrl = null;
         let prompt = q;
 
-        // Method 1: Check if user replied to an image
-        const quotedMsg = m.quoted ? m.quoted : null;
-        const isQuotedImage = quotedMsg && (quotedMsg.mtype === 'imageMessage' || quotedMsg.type === 'imageMessage');
-
-        if (isQuotedImage) {
-            // Get image URL from quoted message
-            imageUrl = await quotedMsg.download?.() || null;
+        // Method 1: Check if replied to an image
+        const quotedMsg = mek.quoted ? mek.quoted : m.quoted ? m.quoted : null;
+        
+        if (quotedMsg && quotedMsg.mtype === 'imageMessage') {
+            // Download the image
+            const buffer = await quotedMsg.download();
             
-            // If we need to get URL from quoted image
-            if (quotedMsg.url) {
-                imageUrl = quotedMsg.url;
-            } else {
-                // Download and upload to get URL
-                const buffer = await quotedMsg.download();
-                // Upload buffer to temporary hosting to get URL
-                const FormData = require('form-data');
-                const form = new FormData();
-                form.append('file', buffer, { filename: 'image.jpg' });
-                
-                const uploadRes = await axios.post('https://tmpfiles.org/api/v1/upload', form, {
-                    headers: form.getHeaders()
-                });
-                
-                if (uploadRes.data && uploadRes.data.data && uploadRes.data.data.url) {
-                    imageUrl = uploadRes.data.data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
-                }
+            // Upload to get URL
+            const FormData = require('form-data');
+            const form = new FormData();
+            form.append('file', buffer, 'image.jpg');
+            
+            const uploadRes = await axios.post('https://tmpfiles.org/api/v1/upload', form, {
+                headers: form.getHeaders()
+            });
+            
+            if (uploadRes.data?.data?.url) {
+                imageUrl = uploadRes.data.data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
             }
             prompt = q;
         } 
-        // Method 2: Check if URL is provided in the message
+        // Method 2: URL provided in message
         else {
-            const urlRegex = /(https?:\/\/[^\s|]+)/gi;
-            const urlMatch = q.match(urlRegex);
+            const urlMatch = q.match(/(https?:\/\/[^\s|]+)/gi);
             
-            if (urlMatch && urlMatch[0]) {
+            if (urlMatch) {
                 imageUrl = urlMatch[0].trim();
-                // Extract prompt (after URL or after |)
-                if (q.includes('|')) {
-                    prompt = q.split('|')[1]?.trim() || q.replace(imageUrl, '').trim();
-                } else {
-                    prompt = q.replace(imageUrl, '').trim();
-                }
+                prompt = q.includes('|') ? q.split('|')[1].trim() : q.replace(imageUrl, '').trim();
             }
         }
 
-        // Validate we have image URL
         if (!imageUrl) {
-            return reply(`❌ *No image found!*\n\nPlease reply to an image or provide an image URL.\n\n*Example:*\n\`.nanobanana https://example.com/photo.jpg | beach background\``);
+            return reply(`❌ *No image found!*\n\nReply to an image or provide URL.`);
         }
 
-        // Validate we have a prompt
         if (!prompt || prompt.length < 2) {
-            return reply(`❌ *Please provide a prompt describing the background change!*\n\n*Example:*\n\`.nanobanana futuristic city background\``);
+            return reply(`❌ *Please provide a prompt!*`);
         }
 
         await react("⏳");
-        await reply("🍌 *Processing your image...*\n_Please wait, this may take a moment..._");
+        await reply("🍌 *Processing image... Please wait...*");
 
-        // Call the Nano Banana API
+        // Call API
         const apiUrl = `https://api-faa.my.id/faa/nano-banana?url=${encodeURIComponent(imageUrl)}&prompt=${encodeURIComponent(prompt)}`;
         
-        const response = await axios.get(apiUrl, {
-            responseType: 'arraybuffer',
-            timeout: 60000, // 60 seconds timeout
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
-        });
+        console.log("API URL:", apiUrl); // Debug log
 
-        // Check if response is valid
-        if (!response.data || response.data.length === 0) {
-            await react("❌");
-            return reply("❌ Failed to process the image. Please try again.");
+        const response = await axios.get(apiUrl, { timeout: 120000 });
+
+        console.log("API Response:", response.data); // Debug log
+
+        // Handle different response types
+        let finalImageUrl = null;
+
+        // Check if response is JSON with result/url/image field
+        if (response.data) {
+            if (typeof response.data === 'string') {
+                finalImageUrl = response.data;
+            } else if (response.data.result) {
+                finalImageUrl = response.data.result;
+            } else if (response.data.url) {
+                finalImageUrl = response.data.url;
+            } else if (response.data.image) {
+                finalImageUrl = response.data.image;
+            } else if (response.data.data?.url) {
+                finalImageUrl = response.data.data.url;
+            } else if (response.data.data?.result) {
+                finalImageUrl = response.data.data.result;
+            }
         }
 
-        // Send the processed image back
+        if (!finalImageUrl) {
+            await react("❌");
+            console.log("Full Response:", JSON.stringify(response.data));
+            return reply("❌ API did not return an image. Response: " + JSON.stringify(response.data).slice(0, 200));
+        }
+
+        // Download the final image
+        const imageResponse = await axios.get(finalImageUrl, {
+            responseType: 'arraybuffer',
+            timeout: 60000
+        });
+
+        // Send the image
         await conn.sendMessage(from, {
-            image: Buffer.from(response.data),
-            caption: `🍌 *Nano Banana - Background Changed!*\n\n📝 *Prompt:* ${prompt}\n\n_Powered by Nano Banana AI_`
+            image: Buffer.from(imageResponse.data),
+            caption: `🍌 *Nano Banana - Done!*\n\n📝 *Prompt:* ${prompt}`
         }, { quoted: mek });
 
         await react("✅");
 
     } catch (e) {
-        console.error("Error in Nano Banana command:", e);
+        console.error("Nano Banana Error:", e);
         await react("❌");
-        
-        if (e.code === 'ECONNABORTED' || e.message.includes('timeout')) {
-            return reply("⏰ Request timed out. The image processing is taking too long. Please try again.");
-        }
-        
-        reply("❌ An error occurred while processing the image. Please try again later.");
+        reply(`❌ Error: ${e.message}`);
     }
 });
