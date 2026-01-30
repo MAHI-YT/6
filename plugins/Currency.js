@@ -3,114 +3,97 @@ const axios = require('axios');
 
 cmd({
     pattern: "nanobanana",
-    alias: ["nano", "banana", "changebg", "bgchange"],
+    alias: ["nano", "banana", "changebg"],
     desc: "Change image background using AI",
     category: "ai",
     react: "🍌",
     filename: __filename
 }, async (conn, mek, m, { from, args, q, reply, react }) => {
     try {
-        // Check if prompt is provided
-        if (!q) {
-            return reply(`❌ *Please provide a prompt!*\n\n📌 *Usage:*\n*Reply to image:* .nanobanana sunset beach\n*With URL:* .nanobanana url | prompt`);
-        }
+        if (!q) return reply("❌ Provide prompt! Reply to image with .nanobanana [prompt]");
 
         let imageUrl = null;
         let prompt = q;
 
-        // Method 1: Check if replied to an image
-        const quotedMsg = mek.quoted ? mek.quoted : m.quoted ? m.quoted : null;
+        // Get quoted message
+        const quoted = mek.quoted || m.quoted;
         
-        if (quotedMsg && quotedMsg.mtype === 'imageMessage') {
-            // Download the image
-            const buffer = await quotedMsg.download();
-            
-            // Upload to get URL
+        if (quoted?.mtype === 'imageMessage') {
+            const buffer = await quoted.download();
             const FormData = require('form-data');
             const form = new FormData();
             form.append('file', buffer, 'image.jpg');
             
-            const uploadRes = await axios.post('https://tmpfiles.org/api/v1/upload', form, {
+            const upload = await axios.post('https://tmpfiles.org/api/v1/upload', form, {
                 headers: form.getHeaders()
             });
             
-            if (uploadRes.data?.data?.url) {
-                imageUrl = uploadRes.data.data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
-            }
-            prompt = q;
-        } 
-        // Method 2: URL provided in message
-        else {
-            const urlMatch = q.match(/(https?:\/\/[^\s|]+)/gi);
-            
-            if (urlMatch) {
-                imageUrl = urlMatch[0].trim();
-                prompt = q.includes('|') ? q.split('|')[1].trim() : q.replace(imageUrl, '').trim();
+            imageUrl = upload.data?.data?.url?.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
+        } else {
+            const match = q.match(/(https?:\/\/[^\s|]+)/);
+            if (match) {
+                imageUrl = match[0];
+                prompt = q.replace(imageUrl, '').replace('|', '').trim();
             }
         }
 
-        if (!imageUrl) {
-            return reply(`❌ *No image found!*\n\nReply to an image or provide URL.`);
-        }
-
-        if (!prompt || prompt.length < 2) {
-            return reply(`❌ *Please provide a prompt!*`);
-        }
+        if (!imageUrl) return reply("❌ Reply to image or provide URL!");
+        if (!prompt) return reply("❌ Provide a prompt!");
 
         await react("⏳");
-        await reply("🍌 *Processing image... Please wait...*");
 
-        // Call API
         const apiUrl = `https://api-faa.my.id/faa/nano-banana?url=${encodeURIComponent(imageUrl)}&prompt=${encodeURIComponent(prompt)}`;
-        
-        console.log("API URL:", apiUrl); // Debug log
 
-        const response = await axios.get(apiUrl, { timeout: 120000 });
-
-        console.log("API Response:", response.data); // Debug log
-
-        // Handle different response types
-        let finalImageUrl = null;
-
-        // Check if response is JSON with result/url/image field
-        if (response.data) {
-            if (typeof response.data === 'string') {
-                finalImageUrl = response.data;
-            } else if (response.data.result) {
-                finalImageUrl = response.data.result;
-            } else if (response.data.url) {
-                finalImageUrl = response.data.url;
-            } else if (response.data.image) {
-                finalImageUrl = response.data.image;
-            } else if (response.data.data?.url) {
-                finalImageUrl = response.data.data.url;
-            } else if (response.data.data?.result) {
-                finalImageUrl = response.data.data.result;
+        // Try as arraybuffer first (direct image)
+        try {
+            const res = await axios.get(apiUrl, {
+                responseType: 'arraybuffer',
+                timeout: 120000
+            });
+            
+            const contentType = res.headers['content-type'];
+            
+            if (contentType && contentType.includes('image')) {
+                // Direct image response
+                await conn.sendMessage(from, {
+                    image: Buffer.from(res.data),
+                    caption: `🍌 *Done!*\n📝 Prompt: ${prompt}`
+                }, { quoted: mek });
+                return await react("✅");
+            } else {
+                // JSON response
+                const data = JSON.parse(Buffer.from(res.data).toString());
+                const imgUrl = data.result || data.url || data.image || data.data?.url;
+                
+                if (imgUrl) {
+                    const img = await axios.get(imgUrl, { responseType: 'arraybuffer' });
+                    await conn.sendMessage(from, {
+                        image: Buffer.from(img.data),
+                        caption: `🍌 *Done!*\n📝 Prompt: ${prompt}`
+                    }, { quoted: mek });
+                    return await react("✅");
+                }
+            }
+        } catch (err) {
+            // Try as JSON
+            const res = await axios.get(apiUrl, { timeout: 120000 });
+            const imgUrl = res.data?.result || res.data?.url || res.data?.image;
+            
+            if (imgUrl) {
+                const img = await axios.get(imgUrl, { responseType: 'arraybuffer' });
+                await conn.sendMessage(from, {
+                    image: Buffer.from(img.data),
+                    caption: `🍌 *Done!*\n📝 Prompt: ${prompt}`
+                }, { quoted: mek });
+                return await react("✅");
             }
         }
 
-        if (!finalImageUrl) {
-            await react("❌");
-            console.log("Full Response:", JSON.stringify(response.data));
-            return reply("❌ API did not return an image. Response: " + JSON.stringify(response.data).slice(0, 200));
-        }
-
-        // Download the final image
-        const imageResponse = await axios.get(finalImageUrl, {
-            responseType: 'arraybuffer',
-            timeout: 60000
-        });
-
-        // Send the image
-        await conn.sendMessage(from, {
-            image: Buffer.from(imageResponse.data),
-            caption: `🍌 *Nano Banana - Done!*\n\n📝 *Prompt:* ${prompt}`
-        }, { quoted: mek });
-
-        await react("✅");
+        await react("❌");
+        reply("❌ Failed to get image from API");
 
     } catch (e) {
-        console.error("Nano Banana Error:", e);
+        console.error("Error:", e);
         await react("❌");
         reply(`❌ Error: ${e.message}`);
     }
