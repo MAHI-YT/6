@@ -1,100 +1,153 @@
-const { cmd } = require('../command');
 const axios = require('axios');
+const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
+const { cmd } = require('../command');
+const FormData = require('form-data');
 
 cmd({
     pattern: "nanobanana",
-    alias: ["nano", "banana", "changebg"],
-    desc: "Change image background using AI",
-    category: "ai",
+    alias: ["nano", "banana", "aiedit", "editai"],
     react: "🍌",
-    filename: __filename
-}, async (conn, mek, m, { from, args, q, reply, react }) => {
+    desc: "Edit image using Nano Banana AI with custom prompt",
+    category: "image",
+    use: ".nanobanana <prompt> (reply to image or provide URL)",
+    filename: __filename,
+},
+async (conn, mek, m, { from, quoted, reply, args }) => {
     try {
-        if (!q) return reply("❌ Provide prompt! Reply to image with .nanobanana [prompt]");
-
-        let imageUrl = null;
-        let prompt = q;
-
-        // Get quoted message
-        const quoted = mek.quoted || m.quoted;
+        const text = args.join(' ');
         
-        if (quoted?.mtype === 'imageMessage') {
-            const buffer = await quoted.download();
-            const FormData = require('form-data');
+        // Check if prompt is provided
+        if (!text) {
+            return reply(`🍌 *NANO BANANA AI EDITOR*
+
+❗ Please provide a prompt!
+
+*Usage:*
+➤ Reply to an image with prompt
+➤ Or provide image URL with prompt
+
+*Examples:*
+• .nanobanana make it cartoon style
+• .nanobanana turn into anime
+• .nanobanana add sunglasses
+• .nanobanana make background sunset`);
+        }
+
+        let imageUrl = '';
+        let prompt = text;
+
+        // Check if URL is provided in text
+        const urlMatch = text.match(/(https?:\/\/[^\s]+\.(jpg|jpeg|png|webp|gif))/i);
+        
+        if (urlMatch) {
+            // URL provided in message
+            imageUrl = urlMatch[1];
+            prompt = text.replace(urlMatch[0], '').trim();
+            
+            if (!prompt) {
+                return reply("📝 Please provide a prompt along with the image URL!");
+            }
+            
+        } else if (quoted && quoted.imageMessage) {
+            // Image replied - download and upload
+            await reply("⏳ Uploading image to server...");
+
+            const stream = await downloadContentFromMessage(
+                quoted.imageMessage,
+                'image'
+            );
+
+            let buffer = Buffer.from([]);
+            for await (const chunk of stream) {
+                buffer = Buffer.concat([buffer, chunk]);
+            }
+
+            // Upload to temporary hosting
             const form = new FormData();
-            form.append('file', buffer, 'image.jpg');
-            
-            const upload = await axios.post('https://tmpfiles.org/api/v1/upload', form, {
-                headers: form.getHeaders()
+            form.append('file', buffer, {
+                filename: 'nanobanana.jpg',
+                contentType: 'image/jpeg'
             });
+
+            const uploadRes = await axios.post(
+                'https://tmpfiles.org/api/v1/upload',
+                form,
+                { headers: form.getHeaders() }
+            );
+
+            imageUrl = uploadRes.data.data.url.replace(
+                'tmpfiles.org/',
+                'tmpfiles.org/dl/'
+            );
             
-            imageUrl = upload.data?.data?.url?.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
         } else {
-            const match = q.match(/(https?:\/\/[^\s|]+)/);
-            if (match) {
-                imageUrl = match[0];
-                prompt = q.replace(imageUrl, '').replace('|', '').trim();
-            }
+            return reply(`🖼️ *No image found!*
+
+Please reply to an image or provide an image URL.
+
+*Example:*
+Reply to image: .nanobanana make it anime
+With URL: .nanobanana https://example.com/photo.jpg make it cartoon`);
         }
 
-        if (!imageUrl) return reply("❌ Reply to image or provide URL!");
-        if (!prompt) return reply("❌ Provide a prompt!");
+        await reply("🍌 Processing your image with Nano Banana AI...\n⏳ Please wait, this may take a moment...");
 
-        await react("⏳");
+        // Call Nano Banana API
+        const apiUrl = `https://api-faa.my.id/faa/nano-banana?imageUrl=${encodeURIComponent(imageUrl)}&prompt=${encodeURIComponent(prompt)}`;
 
-        const apiUrl = `https://api-faa.my.id/faa/nano-banana?url=${encodeURIComponent(imageUrl)}&prompt=${encodeURIComponent(prompt)}`;
-
-        // Try as arraybuffer first (direct image)
-        try {
-            const res = await axios.get(apiUrl, {
-                responseType: 'arraybuffer',
-                timeout: 120000
-            });
-            
-            const contentType = res.headers['content-type'];
-            
-            if (contentType && contentType.includes('image')) {
-                // Direct image response
-                await conn.sendMessage(from, {
-                    image: Buffer.from(res.data),
-                    caption: `🍌 *Done!*\n📝 Prompt: ${prompt}`
-                }, { quoted: mek });
-                return await react("✅");
-            } else {
-                // JSON response
-                const data = JSON.parse(Buffer.from(res.data).toString());
-                const imgUrl = data.result || data.url || data.image || data.data?.url;
-                
-                if (imgUrl) {
-                    const img = await axios.get(imgUrl, { responseType: 'arraybuffer' });
-                    await conn.sendMessage(from, {
-                        image: Buffer.from(img.data),
-                        caption: `🍌 *Done!*\n📝 Prompt: ${prompt}`
-                    }, { quoted: mek });
-                    return await react("✅");
-                }
+        const apiRes = await axios.get(apiUrl, { 
+            timeout: 120000,
+            headers: {
+                'User-Agent': 'WhatsApp-Bot/1.0'
             }
-        } catch (err) {
-            // Try as JSON
-            const res = await axios.get(apiUrl, { timeout: 120000 });
-            const imgUrl = res.data?.result || res.data?.url || res.data?.image;
-            
-            if (imgUrl) {
-                const img = await axios.get(imgUrl, { responseType: 'arraybuffer' });
-                await conn.sendMessage(from, {
-                    image: Buffer.from(img.data),
-                    caption: `🍌 *Done!*\n📝 Prompt: ${prompt}`
-                }, { quoted: mek });
-                return await react("✅");
-            }
+        });
+        
+        const apiData = apiRes.data;
+
+        // Handle different API response structures
+        let resultUrl = null;
+        
+        if (apiData.result) {
+            resultUrl = apiData.result;
+        } else if (apiData.data?.result) {
+            resultUrl = apiData.data.result;
+        } else if (apiData.data?.url) {
+            resultUrl = apiData.data.url;
+        } else if (apiData.url) {
+            resultUrl = apiData.url;
+        } else if (apiData.image) {
+            resultUrl = apiData.image;
+        } else if (apiData.data?.image) {
+            resultUrl = apiData.data.image;
         }
 
-        await react("❌");
-        reply("❌ Failed to get image from API");
+        // Check if we got a result
+        if (!resultUrl) {
+            console.log("API Response:", JSON.stringify(apiData));
+            return reply("❌ Edit failed. API returned no image.\n\nPlease try again with a different prompt.");
+        }
 
-    } catch (e) {
-        console.error("Error:", e);
-        await react("❌");
-        reply(`❌ Error: ${e.message}`);
+        // Send the edited image
+        await conn.sendMessage(
+            from,
+            {
+                image: { url: resultUrl },
+                caption: `✨ *NANO BANANA AI*
+
+🎨 *Prompt:* ${prompt}
+
+> 🍌 Image Edited Successfully!`
+            },
+            { quoted: m }
+        );
+
+    } catch (err) {
+        console.error("NANO BANANA ERROR:", err?.response?.data || err.message || err);
+        
+        if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+            return reply("⏱️ Request timed out. The image might be too large or the server is busy. Please try again.");
+        }
+        
+        reply("❌ Image editing failed. Please try again later.\n\nError: " + (err.message || "Unknown error"));
     }
 });
