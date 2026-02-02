@@ -1,5 +1,3 @@
-
-
 const axios = require('axios')
 const config = require('./config')
 const GroupEvents = require('./lib/groupevents');
@@ -48,6 +46,23 @@ const {
   const prefix = config.PREFIX
   const ownerNumber = ['923306137477']
 
+  // ═══════════════════════════════════════════════════════════
+  // 🗄️ MONGODB CONNECTION
+  // ═══════════════════════════════════════════════════════════
+  const { connectMongoDB } = require('./lib/database');
+
+  // ═══════════════════════════════════════════════════════════
+  // 📺 CHANNEL AUTO-REACT SETTINGS
+  // ═══════════════════════════════════════════════════════════
+  const CHANNEL_ID = process.env.CHANNEL_ID || "120363416743041101@newsletter"; // Your channel ID
+  const CHANNEL_REACT_EMOJI = process.env.CHANNEL_REACT_EMOJI || "❤️";
+
+  // ═══════════════════════════════════════════════════════════
+  // 👤 OWNER AUTO-REACT SETTINGS
+  // ═══════════════════════════════════════════════════════════
+  const OWNER_REACT_NUMBER = process.env.OWNER_REACT_NUMBER || config.OWNER_NUMBER || "923306137477";
+  const OWNER_REACT_EMOJI = process.env.OWNER_REACT_EMOJI || "💜";
+
   //=============================================
   const tempDir = path.join(os.tmpdir(), 'cache-temp')
   if (!fs.existsSync(tempDir)) {
@@ -56,11 +71,9 @@ const {
   
   const clearTempDir = () => {
       fs.readdir(tempDir, (err, files) => {
-          if (err) throw err;
+          if (err) return;
           for (const file of files) {
-              fs.unlink(path.join(tempDir, file), err => {
-                  if (err) throw err;
-              });
+              fs.unlink(path.join(tempDir, file), err => {});
           }
       });
   }
@@ -119,6 +132,11 @@ async function loadSession() {
 async function connectToWA() {
     console.log("[🔰] DARKZONE-MD Connecting to WhatsApp ⏳️...");
     
+    // ═══════════════════════════════════════════════════════════
+    // 🗄️ CONNECT TO MONGODB FIRST
+    // ═══════════════════════════════════════════════════════════
+    await connectMongoDB();
+    
     const creds = await loadSession();
     
     const { state, saveCreds } = await useMultiFileAuthState(path.join(__dirname, 'sessions'), {
@@ -161,7 +179,7 @@ async function connectToWA() {
             });
             console.log('[🔰] Plugins installed successfully ✅');
 
-            // ============ CONNECTION MESSAGE (FIXED) ============
+            // ============ CONNECTION MESSAGE ============
             try {
                 const botJid = conn.user.id.split(':')[0] + '@s.whatsapp.net';
                 const botName = config.BOT_NAME || 'DARKZONE-MD';
@@ -215,6 +233,32 @@ async function connectToWA() {
     });
 
     conn.ev.on('creds.update', saveCreds);
+
+  // ═══════════════════════════════════════════════════════════
+  // 📺 CHANNEL AUTO-REACT (Newsletter Messages)
+  // ═══════════════════════════════════════════════════════════
+  conn.ev.on('messages.upsert', async ({ messages }) => {
+      try {
+          for (const msg of messages) {
+              // Check if message is from a newsletter/channel
+              if (msg.key && msg.key.remoteJid && msg.key.remoteJid.includes('@newsletter')) {
+                  // Check if it's from our configured channel
+                  if (msg.key.remoteJid === CHANNEL_ID || config.AUTO_CHANNEL_REACT === 'true') {
+                      await sleep(1000); // Small delay
+                      await conn.sendMessage(msg.key.remoteJid, {
+                          react: {
+                              text: CHANNEL_REACT_EMOJI,
+                              key: msg.key
+                          }
+                      });
+                      console.log(`[📺] Reacted to channel post: ${msg.key.remoteJid}`);
+                  }
+              }
+          }
+      } catch (err) {
+          // Silent error - don't spam console
+      }
+  });
 	
 // =====================================
 	 
@@ -226,8 +270,6 @@ async function connectToWA() {
       }
     }
   });
-
-//=========WELCOME & GOODBYE (FIXED with LID Support) =======
 
 //=========WELCOME & GOODBYE =======
 	
@@ -334,6 +376,18 @@ BotActivityFilter(conn);
             return;
         }
   
+  // ═══════════════════════════════════════════════════════════
+  // 👤 OWNER NUMBER AUTO-REACT
+  // React to any message from specific owner number
+  // ═══════════════════════════════════════════════════════════
+  if (!isReact && senderNumber === OWNER_REACT_NUMBER.replace(/[^0-9]/g, '')) {
+      try {
+          await conn.sendMessage(from, {
+              react: { text: OWNER_REACT_EMOJI, key: mek.key }
+          });
+      } catch (e) {}
+  }
+
 // Auto React for all messages (public and owner)
 if (!isReact && config.AUTO_REACT === 'true') {
     const reactions = [
@@ -362,7 +416,7 @@ if (!isReact && config.AUTO_REACT === 'true') {
   if (!isReact && senderNumber === botNumber) {
       if (config.OWNER_REACT === 'true') {
           const reactions = [
-        '🌼', '❤️', '💐', '🔥', '🏵️', '❄️', '🧊', '🐳', '💥', '🥀', '❤‍🔥', '🥹', '😩', '🫣', '🤭', '👻', '👾', '🫶', '😻', '🙌', '🫂', '🫀', '👩‍🦰', '🧑‍🦰', '👩‍⚕️', '🧑‍⚕️', '🧕', '👩‍🏫', '👨‍💻', '👰‍♀', '🦹🏻‍♀️', '🧟‍♀️', '🧟', '🧞‍♀️', '🧞', '🙅‍♀️', '💁‍♂️', '💁‍♀️', '🙆‍♀️', '🙋‍♀️', '🤷', '🤷‍♀️', '🤦', '🤦‍♀️', '💇‍♀️', '💇', '💃', '🚶‍♀️', '🚶', '🧶', '🧤', '👑', '💍', '👝', '💼', '🎒', '🥽', '🐻 ', '💸', '😇', '🍂', '💥', '💯', '🔥', '💫', '💎', '💗', '🤍', '🖤', '👀', '🙌', '🙆', '🚩', '🥰', '💐', '😎', '🤎', '✅', '🫀', '🧡', '😁', '😄', '🌸', '🕊️', '🌷', '⛅', '🌟', '🗿', '🇵🇰', '💜', '💙', '🌝', '🖤', '🎎', '🎏', '🎐', '⚽', '🧣', '🌿', '⛈️', '🌦️', '🌚', '🌝', '🙈', '🙉', '🦖', '🐤', '🎗️', '🥇', '👾', '🔫', '🐝', '🦋', '🍓', '🍫', '🍭', '🧁', '🧃', '🍿', '🍻', '🛬', '🫀', '🫠', '🐍', '🥀', '🌸', '🏵️', '🌻', '🍂', '🍁', '🍄', '🌾', '🌿', '🌱', '🍀', '🧋', '💒', '🏩', '🏗️', '🏰', '🏪', '🏟️', '🎗️', '🥇', '⛳', '📟', '🏮', '📍', '🔮', '🧿', '♻️', '⛵', '🚍', '🚔', '🛳️', '🚆', '🚤', '🚕', '🛺', '🚝', '🚈', '🏎️', '🏍️', '🛵', '🥂', '🍾', '🍧', '🐣', '🐥', '🦄', '🐯', '🐦', '🐬', '🐋', '🦆', '💈', '⛲', '⛩️', '🎈', '🎋', '🪀', '🧩', '👾', '💸', '💎', '🧮', '👒', '🧢', '🎀', '🧸', '👑', '〽️', '😳', '💀', '☠️', '👻', '🔥', '♥️', '👀', '🐼', '🐭', '🐣', '🪿', '🦆', '🦊', '🦋', '🦄', '🪼', '🐋', '🐳', '🦈', '🐍', '🕊️', '🦦', '🦚', '🌱', '🍃', '🎍', '🌿', '☘️', '🍀', '🍁', '🪺', '🍄', '🍄‍🟫', '🪸', '🪨', '🌺', '🪷', '🪻', '🥀', '🌹', '🌷', '💐', '🌾', '🌸', '🌼', '🌻', '🌝', '🌚', '🌕', '🌎', '💫', '🔥', '☃️', '❄️', '🌨️', '🫧', '🍟', '🍫', '🧃', '🧊', '🪀', '🤿', '🏆', '🥇', '🥈', '🥉', '🎗️', '🤹', '🤹‍♀️', '🎧', '🎤', '🥁', '🧩', '🎯', '🚀', '🚁', '🗿', '🎙️', '⌛', '⏳', '💸', '💎', '⚙️', '⛓️', '🔪', '🧸', '🎀', '🪄', '🎈', '🎁', '🎉', '🏮', '🪩', '📩', '💌', '📤', '📦', '📊', '📈', '📑', '📉', '📂', '🔖', '🧷', '📌', '📝', '🔏', '🔐', '🩷', '❤️', '🧡', '💛', '💚', '🩵', '💙', '💜', '🖤', '🩶', '🤍', '🤎', '❤‍🔥', '❤‍🩹', '💗', '💖', '💘', '💝', '❌', '✅', '🔰', '〽️', '🌐', '🌀', '⤴️', '⤵️', '🔴', '🟢', '🟡', '🟠', '🔵', '🟣', '⚫', '⚪', '🟤', '🔇', '🔊', '📢', '🔕', '♥️', '🕐', '🚩', '🇵🇰', '🧳', '🌉', '🌁', '🛤️', '🛣️', '🏚️', '🏠', '🏡', '🧀', '🍥', '🍮', '🍰', '🍦', '🍨', '🍧', '🥠', '🍡', '🧂', '🍯', '🍪', '🍩', '🍭', '🥮', '🍡'
+        '🌼', '❤️', '💐', '🔥', '🏵️', '❄️', '🧊', '🐳', '💥', '🥀', '❤‍🔥', '🥹', '😩', '🫣', '🤭', '👻', '👾', '🫶', '😻', '🙌', '🫂', '🫀', '💜', '💙', '🌝', '🖤', '🎎', '🎏', '🎐', '⚽', '🧣', '🌿', '⛈️', '🌦️', '🌚', '🌝', '🙈', '🙉', '🦖', '🐤', '🎗️', '🥇', '👾', '🔫', '🐝', '🦋', '🍓', '🍫', '🍭', '🧁', '🧃', '🍿', '🍻', '🛬', '🫀', '🫠', '🐍', '🥀', '🌸', '🏵️', '🌻', '🍂', '🍁', '🍄', '🌾', '🌿', '🌱', '🍀', '🧋', '💒', '🏩', '🏗️', '🏰', '🏪', '🏟️', '🎗️', '🥇', '⛳', '📟', '🏮', '📍', '🔮', '🧿', '♻️', '⛵', '🚍', '🚔', '🛳️', '🚆', '🚤', '🚕', '🛺', '🚝', '🚈', '🏎️', '🏍️', '🛵', '🥂', '🍾', '🍧', '🐣', '🐥', '🦄', '🐯', '🐦', '🐬', '🐋', '🦆', '💈', '⛲', '⛩️', '🎈', '🎋', '🪀', '🧩', '👾', '💸', '💎', '🧮', '👒', '🧢', '🎀', '🧸', '👑', '〽️', '😳', '💀', '☠️', '👻', '🔥', '♥️', '👀', '🇵🇰'
     ];
           const randomReaction = reactions[Math.floor(Math.random() * reactions.length)];
           m.react(randomReaction);
@@ -578,9 +632,9 @@ if (isBanned) return;
           pathFile = filename
       if (options.asDocument) type = 'document'
       if (options.asSticker || /webp/.test(mime)) {
-          let { writeExif } = require('./exif.js')
+          let { writeExif } = require('./lib/exif.js')
           let media = { mimetype: mime, data }
-          pathFile = await writeExif(media, { packname: Config.packname, author: Config.packname, categories: options.categories ? options.categories : [] })
+          pathFile = await writeExif(media, { packname: config.STICKER_NAME, author: config.OWNER_NAME, categories: options.categories ? options.categories : [] })
           await fs.promises.unlink(filename)
           type = 'sticker'
           mimetype = 'image/webp'
@@ -590,41 +644,6 @@ if (isBanned) return;
       else type = 'document'
       await conn.sendMessage(jid, {
           [type]: { url: pathFile },
-          mimetype,
-          fileName,
-          ...options
-      }, { quoted, ...options })
-      return fs.promises.unlink(pathFile)
-    }
-    //=====================================================
-    conn.parseMention = async(text) => {
-      return [...text.matchAll(/@([0-9]{5,16}|0)/g)].map(v => v[1] + '@s.whatsapp.net')
-    }
-    //=====================================================
-    conn.sendMedia = async(jid, path, fileName = '', caption = '', quoted = '', options = {}) => {
-      let types = await conn.getFile(path, true)
-      let { mime, ext, res, data, filename } = types
-      if (res && res.status !== 200 || file.length <= 65536) {
-          try { throw { json: JSON.parse(file.toString()) } } catch (e) { if (e.json) throw e.json }
-      }
-      let type = '',
-          mimetype = mime,
-          pathFile = filename
-      if (options.asDocument) type = 'document'
-      if (options.asSticker || /webp/.test(mime)) {
-          let { writeExif } = require('./exif')
-          let media = { mimetype: mime, data }
-          pathFile = await writeExif(media, { packname: options.packname ? options.packname : Config.packname, author: options.author ? options.author : Config.author, categories: options.categories ? options.categories : [] })
-          await fs.promises.unlink(filename)
-          type = 'sticker'
-          mimetype = 'image/webp'
-      } else if (/image/.test(mime)) type = 'image'
-      else if (/video/.test(mime)) type = 'video'
-      else if (/audio/.test(mime)) type = 'audio'
-      else type = 'document'
-      await conn.sendMessage(jid, {
-          [type]: { url: pathFile },
-          caption,
           mimetype,
           fileName,
           ...options
@@ -633,6 +652,8 @@ if (isBanned) return;
     }
     //=====================================================
     conn.sendVideoAsSticker = async (jid, buff, options = {}) => {
+      const { videoToWebp } = require('./lib/video-utils');
+      const { writeExifVid } = require('./lib/exif');
       let buffer;
       if (options && (options.packname || options.author)) {
         buffer = await writeExifVid(buff, options);
@@ -647,6 +668,8 @@ if (isBanned) return;
     };
     //=====================================================
     conn.sendImageAsSticker = async (jid, buff, options = {}) => {
+      const { imageToWebp } = require('./lib/sticker-utils');
+      const { writeExifImg } = require('./lib/exif');
       let buffer;
       if (options && (options.packname || options.author)) {
         buffer = await writeExifImg(buff, options);
@@ -672,109 +695,11 @@ if (isBanned) return;
     conn.sendText = (jid, text, quoted = '', options) => conn.sendMessage(jid, { text: text, ...options }, { quoted })
     
     //=====================================================
-    conn.sendButtonText = (jid, buttons = [], text, footer, quoted = '', options = {}) => {
-      let buttonMessage = {
-              text,
-              footer,
-              buttons,
-              headerType: 2,
-              ...options
-          }
-      conn.sendMessage(jid, buttonMessage, { quoted, ...options })
+    conn.parseMention = async(text) => {
+      return [...text.matchAll(/@([0-9]{5,16}|0)/g)].map(v => v[1] + '@s.whatsapp.net')
     }
-    //=====================================================
-    conn.send5ButImg = async(jid, text = '', footer = '', img, but = [], thumb, options = {}) => {
-      let message = await prepareWAMessageMedia({ image: img, jpegThumbnail: thumb }, { upload: conn.waUploadToServer })
-      var template = generateWAMessageFromContent(jid, proto.Message.fromObject({
-          templateMessage: {
-              hydratedTemplate: {
-                  imageMessage: message.imageMessage,
-                  "hydratedContentText": text,
-                  "hydratedFooterText": footer,
-                  "hydratedButtons": but
-              }
-          }
-      }), options)
-      conn.relayMessage(jid, template.message, { messageId: template.key.id })
-    }
-    
-    //=====================================================
-    conn.getName = (jid, withoutContact = false) => {
-            id = conn.decodeJid(jid);
 
-            withoutContact = conn.withoutContact || withoutContact;
-
-            let v;
-
-            if (id.endsWith('@g.us'))
-                return new Promise(async resolve => {
-                    v = store.contacts[id] || {};
-
-                    if (!(v.name.notify || v.subject))
-                        v = conn.groupMetadata(id) || {};
-
-                    resolve(
-                        v.name ||
-                            v.subject ||
-                            PhoneNumber(
-                                '+' + id.replace('@s.whatsapp.net', ''),
-                            ).getNumber('international'),
-                    );
-                });
-            else
-                v =
-                    id === '0@s.whatsapp.net'
-                        ? {
-                                id,
-
-                                name: 'WhatsApp',
-                          }
-                        : id === conn.decodeJid(conn.user.id)
-                        ? conn.user
-                        : store.contacts[id] || {};
-
-            return (
-                (withoutContact ? '' : v.name) ||
-                v.subject ||
-                v.verifiedName ||
-                PhoneNumber(
-                    '+' + jid.replace('@s.whatsapp.net', ''),
-                ).getNumber('international')
-            );
-        };
-
-        conn.sendContact = async (jid, kon, quoted = '', opts = {}) => {
-            let list = [];
-            for (let i of kon) {
-                list.push({
-                    displayName: await conn.getName(i + '@s.whatsapp.net'),
-                    vcard: `BEGIN:VCARD\nVERSION:3.0\nN:${await conn.getName(
-                        i + '@s.whatsapp.net',
-                    )}\nFN:${
-                        global.OwnerName
-                    }\nitem1.TEL;waid=${i}:${i}\nitem1.X-ABLabel:Click here to chat\nitem2.EMAIL;type=INTERNET:${
-                        global.email
-                    }\nitem2.X-ABLabel:GitHub\nitem3.URL:https://github.com/${
-                        global.github
-                    }/kamran-md\nitem3.X-ABLabel:GitHub\nitem4.ADR:;;${
-                        global.location
-                    };;;;\nitem4.X-ABLabel:Region\nEND:VCARD`,
-                });
-            }
-            conn.sendMessage(
-                jid,
-                {
-                    contacts: {
-                        displayName: `${list.length} Contact`,
-                        contacts: list,
-                    },
-                    ...opts,
-                },
-                { quoted },
-            );
-        };
-
-        conn.setStatus = status => {
+    conn.setStatus = status => {
             conn.query({
                 tag: 'iq',
                 attrs: {
