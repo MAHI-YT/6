@@ -1,201 +1,213 @@
 {
   "name": "DARKZONE-MD",
-  "description": "Javascript WhatsApp bot made by 𝐸𝑅𝐹𝒜𝒩 𝒜𝐻𝑀𝒜𝒟",
-  "logo": "https://files.catbox.moe/4964gx.jpg",
-  "keywords": ["DARKZONE-MD"],
+  "description": "A WhatsApp Bot Created By Irfan Ahmad",
+  "logo": "https://i.ibb.co/Sw4pzTWC/IMG-20260124-WA0728.jpg",
+  "keywords": ["DARKZONE-MD", "WhatsApp", "Bot", "Irfan Ahmad"],
   "success_url": "/",
-  "stack": "container",
+  "stack": "heroku-24",
   "env": {
     "SESSION_ID": {
-      "description": "Put the session-id here.",
+      "description": "Your bot session ID from MEGA",
       "required": true,
       "value": ""
     },
-    "MONGODB_URI": {
-      "description": "MongoDB connection URL for persistent settings",
-      "required": false,
-      "value": ""
-    },
-    "STICKER_NAME": {
-      "description": "Type your sticker pack name.",
-      "required": false,
-      "value": "DARKZONE-MD"
-    },
     "PREFIX": {
-      "description": "Paste your bot prefix.",
+      "description": "Command prefix (e.g., . / ! * - +)",
       "required": false,
       "value": "."
     },
     "MODE": {
-      "description": "Select bot mode: public/private/inbox/groups",
+      "description": "Bot mode: public / private / inbox / groups",
       "required": false,
       "value": "public"
     },
+    "BOT_NAME": {
+      "description": "Your bot's display name",
+      "required": false,
+      "value": "DARKZONE-MD"
+    },
+    "OWNER_NAME": {
+      "description": "Owner's name",
+      "required": false,
+      "value": "Irfan Ahmad"
+    },
+    "OWNER_NUMBER": {
+      "description": "Owner's WhatsApp number (without +)",
+      "required": false,
+      "value": "923306137477"
+    },
+    "STICKER_NAME": {
+      "description": "Sticker pack name",
+      "required": false,
+      "value": "Irfan Ahmad"
+    },
     "ANTI_DELETE": {
-      "description": "Set true to show deleted messages.",
+      "description": "Show deleted messages (true/false)",
       "required": false,
       "value": "true"
+    },
+    "ANTI_DEL_PATH": {
+      "description": "Where to send deleted messages: inbox / same",
+      "required": false,
+      "value": "same"
     },
     "ANTI_LINK": {
-      "description": "Set true for anti-link (warn then kick).",
+      "description": "Auto delete group links (true/false)",
       "required": false,
       "value": "true"
     },
+    "ANTI_LINK_KICK": {
+      "description": "Kick member who sends links (true/false)",
+      "required": false,
+      "value": "false"
+    },
+    "ANTI_BAD": {
+      "description": "Auto delete bad words (true/false)",
+      "required": false,
+      "value": "false"
+    },
+    "ANTI_CALL": {
+      "description": "Reject incoming calls (true/false)",
+      "required": false,
+      "value": "false"
+    },
+    "ANTI_VV": {
+      "description": "Anti view-once messages (true/false)",
+      "required": false,
+      "value": "true"
+    },
+    "ANTI_BOT": {
+      "description": "Block other bots (true/false)",
+      "required": false,
+      "value": "false"
+    },
     "ALWAYS_ONLINE": {
-      "description": "Make it true for always online.",
-      "required": false,
-      "value": "false"
-    },
-    "AUTO_REPLY": {
-      "description": "Make it true for automatic reply.",
-      "required": false,
-      "value": "false"
-    },
-    "AUTO_STICKER": {
-      "description": "Make it true for automatic sticker.",
+      "description": "Keep bot always online (true/false)",
       "required": false,
       "value": "false"
     },
     "AUTO_STATUS_SEEN": {
-      "description": "Make it true for automatic status seen.",
-      "required": true,
+      "description": "Auto view status updates (true/false)",
+      "required": false,
       "value": "true"
     },
     "AUTO_STATUS_REACT": {
-      "description": "Make it true for automatic status reaction.",
-      "required": true,
+      "description": "Auto react to status updates (true/false)",
+      "required": false,
       "value": "true"
     },
     "AUTO_STATUS_REPLY": {
-      "description": "Make it true for auto reply on status.",
-      "required": true,
+      "description": "Auto reply to status updates (true/false)",
+      "required": false,
       "value": "false"
     },
     "AUTO_STATUS_MSG": {
-      "description": "Type custom message on status reply.",
-      "required": true,
-      "value": "*SEEN YOUR STATUS BY DARKZONE-MD 🖤*"
-    },
-    "CHANNEL_ID": {
-      "description": "Your WhatsApp channel ID for auto-react.",
+      "description": "Message for auto status reply",
       "required": false,
-      "value": "120363416743041101@newsletter"
+      "value": "*DARKZONE-MD VIEWED YOUR STATUS 🤖*"
     },
-    "CHANNEL_REACT_EMOJI": {
-      "description": "Emoji to react on channel posts.",
-      "required": false,
-      "value": "❤️"
-    },
-    "AUTO_CHANNEL_REACT": {
-      "description": "Auto react to all channel posts.",
-      "required": false,
-      "value": "true"
-    },
-    "OWNER_REACT_NUMBER": {
-      "description": "Number to auto-react on their messages.",
-      "required": false,
-      "value": "923306137477"
-    },
-    "OWNER_REACT_EMOJI": {
-      "description": "Emoji to react on owner messages.",
-      "required": false,
-      "value": "💜"
-    },
-    "OWNER_NAME": {
-      "description": "Type Bot Owner Name.",
-      "required": false,
-      "value": "𝐸𝑅𝐹𝒜𝒩 𝒜𝐻𝑀𝒜𝒟"
-    },
-    "OWNER_NUMBER": {
-      "description": "Put the owner number for bot.",
-      "required": false,
-      "value": "923306137477"
-    },
-    "BOT_NAME": {
-      "description": "Type here the bot name.",
-      "required": false,
-      "value": "DARKZONE-MD"
-    },
-    "ANTI_BAD": {
-      "description": "Make it true for auto delete bad words.",
+    "AUTO_REPLY": {
+      "description": "Enable auto-reply (true/false)",
       "required": false,
       "value": "false"
     },
-    "MENTION_REPLY": {
-      "description": "Make it true for mention reply.",
-      "required": false,
-      "value": "false"
-    },
-    "MENU_IMAGE_URL": {
-      "description": "Add url for menu image.",
-      "required": false,
-      "value": "https://files.catbox.moe/4964gx.jpg"
-    },
-    "DESCRIPTION": {
-      "description": "Add caption for menu.",
-      "required": false,
-      "value": "*© CREATER 𝐸𝑅𝐹𝒜𝒩 𝒜𝐻𝑀𝒜𝒟*"
-    },
-    "DELETE_LINKS": {
-      "description": "Remove links without kicking.",
-      "required": false,
-      "value": "false"
-    },
-    "AUTO_RECORDING": {
-      "description": "Make it true for auto recording.",
-      "required": false,
-      "value": "false"
-    },
-    "AUTO_TYPING": {
-      "description": "Make it true for auto typing.",
+    "AUTO_STICKER": {
+      "description": "Enable auto-sticker (true/false)",
       "required": false,
       "value": "false"
     },
     "AUTO_REACT": {
-      "description": "Make it true to react on every message.",
+      "description": "React to every message (true/false)",
+      "required": false,
+      "value": "false"
+    },
+    "OWNER_REACT": {
+      "description": "React to owner messages only (true/false)",
       "required": false,
       "value": "false"
     },
     "CUSTOM_REACT": {
-      "description": "Make it true for custom reactions.",
+      "description": "Use custom reaction emojis (true/false)",
       "required": false,
       "value": "false"
     },
     "CUSTOM_REACT_EMOJIS": {
-      "description": "Put custom react emojis.",
+      "description": "Custom reaction emojis (comma separated)",
       "required": false,
-      "value": "💝,💖,💗,❤️‍🩹,❤️,🧡,💛,💚,💙,💜,🤎,🖤,🤍"
+      "value": "💝,💖,💗,❤️,🧡,💛,💚,💙,💜"
     },
-    "ANTI_DEL_PATH": {
-      "description": "Change to 'same' for same chat or 'inbox'.",
-      "required": false,
-      "value": "inbox"
-    },
-    "ADMIN_ACTION": {
-      "description": "Make it true to see admin activity.",
+    "AUTO_TYPING": {
+      "description": "Show typing indicator (true/false)",
       "required": false,
       "value": "false"
     },
-    "WELCOME": {
-      "description": "Make it true for welcome message.",
+    "AUTO_RECORDING": {
+      "description": "Show recording indicator (true/false)",
       "required": false,
       "value": "false"
     },
-    "GOODBYE": {
-      "description": "Make it true for goodbye message.",
+    "AUTO_BIO": {
+      "description": "Auto update bio (true/false)",
+      "required": false,
+      "value": "false"
+    },
+    "MENTION_REPLY": {
+      "description": "Reply when mentioned (true/false)",
       "required": false,
       "value": "false"
     },
     "READ_MESSAGE": {
-      "description": "Make it true to auto read messages.",
+      "description": "Auto read all messages (true/false)",
       "required": false,
       "value": "false"
+    },
+    "CHATBOT": {
+      "description": "Enable chatbot (on/off)",
+      "required": false,
+      "value": "off"
+    },
+    "WELCOME": {
+      "description": "Send welcome message in groups (true/false)",
+      "required": false,
+      "value": "false"
+    },
+    "GOODBYE": {
+      "description": "Send goodbye message in groups (true/false)",
+      "required": false,
+      "value": "false"
+    },
+    "ADMIN_EVENTS": {
+      "description": "Show admin promote/demote events (true/false)",
+      "required": false,
+      "value": "false"
+    },
+    "DELETE_LINKS": {
+      "description": "Delete links without kicking (true/false)",
+      "required": false,
+      "value": "false"
+    },
+    "PM_BLOCKER": {
+      "description": "Block private messages (true/false)",
+      "required": false,
+      "value": "false"
+    },
+    "MENU_IMAGE_URL": {
+      "description": "Image URL for menu/alive command",
+      "required": false,
+      "value": "https://i.ibb.co/Sw4pzTWC/IMG-20260124-WA0728.jpg"
+    },
+    "DESCRIPTION": {
+      "description": "Bot description text",
+      "required": false,
+      "value": "*© Created By Irfan Ahmad*"
     }
   },
   "buildpacks": [
     {
+      "url": "https://github.com/jonathanong/heroku-buildpack-ffmpeg-latest.git"
+    },
+    {
       "url": "https://github.com/heroku/heroku-buildpack-nodejs.git"
     }
-  ],
-  "stack": "heroku-24"
+  ]
 }
